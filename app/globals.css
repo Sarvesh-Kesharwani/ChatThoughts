@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply bg-brand-bg text-brand-ink antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-pill border border-brand-soft bg-white px-4 py-2 text-sm font-semibold shadow-btn transition active:translate-y-[2px] active:shadow-none;
+  }
+
+  .btn-accent {
+    @apply btn border-blue-300 bg-brand-accent text-white;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-pill border border-brand-soft bg-white px-3 py-1.5 text-sm font-semibold;
+  }
+
+  .panel {
+    @apply rounded-2xl border border-brand-soft bg-white p-5;
+  }
+}
