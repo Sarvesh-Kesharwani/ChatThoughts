@@ -4,3 +4,5 @@ out
 .env.local
 .env*.local
 npm-debug.log*
+.vercel
+.devserver*.log
