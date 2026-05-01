@@ -1,13 +1,14 @@
-# BaseApp
+# ChatThoughts
 
-`BaseApp` is a reusable Next.js starter cloned from FinFlow base layers.
+`ChatThoughts` is a personal note-recall app built on the BaseApp auth and sync foundation.
 
 Included foundations:
-- Header with navigation and action buttons
+- Layer 1 raw thought cards
+- Layer 2 derived problem-solution cards linked back to their source thoughts
+- Layer 3 API-key-based chat that retrieves relevant cards with source tracing
 - Google sign-in and sign-out via Auth.js
-- Google Drive `appDataFolder` sync mechanism
+- Google Drive `appDataFolder` sync for the persisted note graph
 - Cookie-backed local state store with dirty/synced metadata
-- Sync API endpoints and a sample state module
 
 ## Setup
 
@@ -45,3 +46,4 @@ Drive scope used:
 - `POST /api/auth/cleanup`
 - `GET/POST /api/base/state`
 - `GET/POST/PUT /api/drive/sync`
+- `POST /api/wiki/chat`

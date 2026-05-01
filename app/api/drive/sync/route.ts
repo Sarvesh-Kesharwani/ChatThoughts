@@ -20,7 +20,7 @@ export async function GET() {
     return Response.json({ error: 'Not signed in' }, { status: 401 });
   }
 
-  let cookieStore: BaseStore = { sampleCounter: 0, lastNote: '' };
+  let cookieStore: BaseStore = { thoughts: [], insights: [] };
   let driveData = null;
   let localMeta = { updatedAt: null as string | null, dirty: false };
   try {
@@ -33,9 +33,7 @@ export async function GET() {
     return Response.json({ error: 'Failed to read Drive sync state' }, { status: 502 });
   }
 
-  const driveStore: BaseStore = driveData
-    ? { sampleCounter: driveData.sampleCounter, lastNote: driveData.lastNote }
-    : { sampleCounter: 0, lastNote: '' };
+  const driveStore: BaseStore = driveData ? { thoughts: driveData.thoughts, insights: driveData.insights } : { thoughts: [], insights: [] };
 
   return Response.json({
     initialized: await hasDriveSyncHydrated(),
@@ -57,10 +55,7 @@ export async function POST() {
     const driveData = await readDriveBaseStore(session.accessToken);
 
     if (driveData && !localMeta.dirty) {
-      const driveStore: BaseStore = {
-        sampleCounter: driveData.sampleCounter,
-        lastNote: driveData.lastNote,
-      };
+      const driveStore: BaseStore = { thoughts: driveData.thoughts, insights: driveData.insights };
       const replacedLocal = !sameStore(cookieStore, driveStore);
 
       await setCookieBaseStore(driveStore);
@@ -110,8 +105,8 @@ export async function PUT() {
   }
 
   await setCookieBaseStore({
-    sampleCounter: driveData.sampleCounter,
-    lastNote: driveData.lastNote,
+    thoughts: driveData.thoughts,
+    insights: driveData.insights,
   });
   await markCookieStoreSynced(driveData.updatedAt);
   await markDriveSyncHydrated();

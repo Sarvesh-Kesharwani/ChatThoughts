@@ -12,9 +12,34 @@ const MAX_AGE = 60 * 60 * 24 * 365;
 const MAX_COOKIE_CHUNK_SIZE = 3000;
 
 function normalizeStore(input: Partial<BaseStore> | null | undefined): BaseStore {
-  const sampleCounter = Number.isFinite(input?.sampleCounter) ? Number(input?.sampleCounter) : 0;
-  const lastNote = String(input?.lastNote ?? '').trim().slice(0, 240);
-  return { sampleCounter, lastNote };
+  const thoughts = Array.isArray(input?.thoughts)
+    ? input.thoughts
+        .map((thought) => ({
+          id: String(thought?.id ?? '').trim(),
+          content: String(thought?.content ?? '').trim().slice(0, 2000),
+          createdAt: String(thought?.createdAt ?? '').trim(),
+        }))
+        .filter((thought) => thought.id && thought.content && thought.createdAt)
+        .slice(0, 300)
+    : [];
+
+  const insights = Array.isArray(input?.insights)
+    ? input.insights
+        .map((insight) => ({
+          id: String(insight?.id ?? '').trim(),
+          thoughtId: String(insight?.thoughtId ?? '').trim(),
+          problem: String(insight?.problem ?? '').trim().slice(0, 500),
+          solution: String(insight?.solution ?? '').trim().slice(0, 1000),
+          tags: Array.isArray(insight?.tags)
+            ? insight.tags.map((tag) => String(tag).trim().toLowerCase().slice(0, 30)).filter(Boolean).slice(0, 10)
+            : [],
+          createdAt: String(insight?.createdAt ?? '').trim(),
+        }))
+        .filter((insight) => insight.id && insight.thoughtId && insight.problem && insight.solution && insight.createdAt)
+        .slice(0, 1200)
+    : [];
+
+  return { thoughts, insights };
 }
 
 function parseState(raw: string): BaseStore {
