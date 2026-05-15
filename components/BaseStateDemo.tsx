@@ -94,15 +94,15 @@ export function BaseStateDemo({ initialState }: { initialState: BaseStore }) {
             .map((thought) => (
               <article key={thought.id} className="rounded-xl border border-brand-soft bg-slate-50 p-3">
                 <div className="text-xs text-slate-500">{new Date(thought.createdAt).toLocaleString()}</div>
-                <div className="mt-1 text-sm font-medium text-slate-800">{thought.content}</div>
-                <div className="mt-1 text-xs text-slate-500">ID: {thought.id}</div>
+                <div className="mt-1 break-words text-sm font-medium text-slate-800">{thought.content}</div>
+                <div className="mt-1 break-all text-xs text-slate-500">ID: {thought.id}</div>
               </article>
             ))}
         </div>
       </section>
 
       <section className="panel space-y-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">Layer 2: Problem-Solution Cards</h2>
           <button type="button" className="btn" disabled={pending} onClick={() => void rebuildInsights()}>
             Rebuild
@@ -121,7 +121,7 @@ export function BaseStateDemo({ initialState }: { initialState: BaseStore }) {
                 <p className="mt-1 text-sm">
                   <span className="font-semibold">Solution:</span> {insight.solution}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">Source Thought: {insight.thoughtId}</p>
+                <p className="mt-1 break-all text-xs text-slate-500">Source Thought: {insight.thoughtId}</p>
               </article>
             ))}
         </div>
@@ -160,9 +160,9 @@ export function BaseStateDemo({ initialState }: { initialState: BaseStore }) {
                 <p>
                   <span className="font-semibold">Solution:</span> {ref.solution}
                 </p>
-                <p className="text-xs text-slate-500">Insight ID: {ref.insightId}</p>
-                <p className="text-xs text-slate-500">Source Thought ID: {ref.thoughtId}</p>
-                <p className="mt-1 text-xs text-slate-600">Source: {ref.sourceThought}</p>
+                <p className="break-all text-xs text-slate-500">Insight ID: {ref.insightId}</p>
+                <p className="break-all text-xs text-slate-500">Source Thought ID: {ref.thoughtId}</p>
+                <p className="mt-1 break-words text-xs text-slate-600">Source: {ref.sourceThought}</p>
               </article>
             ))}
           </div>

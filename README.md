@@ -1,14 +1,14 @@
 # ChatThoughts
 
-`ChatThoughts` is a personal note-recall app built on the BaseApp auth and sync foundation.
+`ChatThoughts` is a private mantra-recall app built on the BaseApp auth foundation with Supabase-backed thought storage.
 
 Included foundations:
-- Layer 1 raw thought cards
-- Layer 2 derived problem-solution cards linked back to their source thoughts
-- Layer 3 API-key-based chat that retrieves relevant cards with source tracing
+- Passcode gate before the app can be entered
+- Thought cards with `when will need this?` and `the mantra.`
+- DeepSeek-powered top-3 mantra search that returns matching cards only
+- Conflict capture for duplicate or contradictory thoughts
 - Google sign-in and sign-out via Auth.js
-- Google Drive `appDataFolder` sync for the persisted note graph
-- Cookie-backed local state store with dirty/synced metadata
+- Google Drive `appDataFolder` sync foundation remains available for base state
 
 ## Setup
 
@@ -32,6 +32,11 @@ npm run dev:fresh
 - `AUTH_URL` (local: `http://localhost:3000`)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `CHATTHOUGHTS_PASSCODE`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_MODEL` (defaults to `deepseek-v4-flash`)
 
 Google OAuth must include:
 - Authorized JavaScript origin: `http://localhost:3000`
@@ -46,4 +51,16 @@ Drive scope used:
 - `POST /api/auth/cleanup`
 - `GET/POST /api/base/state`
 - `GET/POST/PUT /api/drive/sync`
+- `POST /api/passcode`
+- `GET/POST /api/thoughts`
+- `GET /api/conflicts`
+- `POST /api/conflicts/[id]/resolve`
 - `POST /api/wiki/chat`
+
+## Supabase
+
+Apply `supabase/chatthoughts_schema.sql` to create:
+- `public.thoughts`
+- `public.thought_conflicts`
+
+The app uses the service role key only on the server.

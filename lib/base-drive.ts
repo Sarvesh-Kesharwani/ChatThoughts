@@ -1,4 +1,5 @@
 import type { BaseStore } from './base-types';
+import { DEFAULT_FEATURE_REQUEST_CATEGORIES } from './constants';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
@@ -45,7 +46,32 @@ function normalizeStore(input: Partial<BaseStore> | null | undefined): BaseStore
         .slice(0, 1200)
     : [];
 
-  return { thoughts, insights };
+  const featureRequestCategories = Array.isArray(input?.featureRequestCategories)
+    ? [
+        ...DEFAULT_FEATURE_REQUEST_CATEGORIES,
+        ...input.featureRequestCategories.map((category) => String(category).trim().toLowerCase().slice(0, 40)),
+      ]
+        .filter(Boolean)
+        .filter((category, index, categories) => categories.indexOf(category) === index)
+        .slice(0, 20)
+    : DEFAULT_FEATURE_REQUEST_CATEGORIES;
+
+  const featureRequests = Array.isArray(input?.featureRequests)
+    ? input.featureRequests
+        .map((item) => ({
+          id: String(item?.id ?? '').trim(),
+          description: String(item?.description ?? '').trim().slice(0, 500),
+          complete: Boolean(item?.complete),
+          category: featureRequestCategories.includes(String(item?.category ?? '').trim().toLowerCase())
+            ? String(item?.category ?? '').trim().toLowerCase()
+            : DEFAULT_FEATURE_REQUEST_CATEGORIES[0],
+          createdAt: String(item?.createdAt ?? '').trim(),
+        }))
+        .filter((item) => item.id && item.description && item.createdAt)
+        .slice(0, 200)
+    : [];
+
+  return { thoughts, insights, featureRequestCategories, featureRequests };
 }
 
 async function ensureDriveOk(res: Response, action: string): Promise<void> {

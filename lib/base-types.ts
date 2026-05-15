@@ -13,7 +13,17 @@ export interface InsightCard {
   createdAt: string;
 }
 
+export interface FeatureRequestItem {
+  id: string;
+  description: string;
+  complete: boolean;
+  category: string;
+  createdAt: string;
+}
+
 export interface BaseStore {
   thoughts: ThoughtCard[];
   insights: InsightCard[];
+  featureRequestCategories: string[];
+  featureRequests: FeatureRequestItem[];
 }

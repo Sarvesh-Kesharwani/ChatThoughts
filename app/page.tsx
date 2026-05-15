@@ -1,6 +1,6 @@
-import { BaseStateDemo } from '@/components/BaseStateDemo';
-import { getCookieBaseStore } from '@/lib/base-store';
+import { ThoughtDashboard } from '@/components/ThoughtDashboard';
 import { getSession } from '@/lib/session';
+import { listThoughts } from '@/lib/thoughts-repository';
 
 export default async function HomePage() {
   const session = await getSession();
@@ -16,12 +16,18 @@ export default async function HomePage() {
     );
   }
 
-  const state = await getCookieBaseStore();
+  try {
+    const thoughts = await listThoughts();
 
-  return (
-    <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">ChatThoughts</h1>
-      <BaseStateDemo initialState={state} />
-    </section>
-  );
+    return <ThoughtDashboard initialThoughts={thoughts} />;
+  } catch (error) {
+    return (
+      <section className="panel space-y-3">
+        <h1 className="text-xl font-semibold">Database setup required</h1>
+        <p className="text-sm text-slate-600">
+          {error instanceof Error ? error.message : 'Unable to connect to Supabase.'}
+        </p>
+      </section>
+    );
+  }
 }

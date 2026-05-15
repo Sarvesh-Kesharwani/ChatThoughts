@@ -1,5 +1,6 @@
 import type { BaseStore } from '@/lib/base-types';
 import { readDriveBaseStore, writeDriveBaseStore } from '@/lib/base-drive';
+import { DEFAULT_FEATURE_REQUEST_CATEGORIES } from '@/lib/constants';
 import {
   getCookieBaseStore,
   getCookieSyncMeta,
@@ -20,7 +21,12 @@ export async function GET() {
     return Response.json({ error: 'Not signed in' }, { status: 401 });
   }
 
-  let cookieStore: BaseStore = { thoughts: [], insights: [] };
+  let cookieStore: BaseStore = {
+    thoughts: [],
+    insights: [],
+    featureRequestCategories: DEFAULT_FEATURE_REQUEST_CATEGORIES,
+    featureRequests: [],
+  };
   let driveData = null;
   let localMeta = { updatedAt: null as string | null, dirty: false };
   try {
@@ -33,7 +39,14 @@ export async function GET() {
     return Response.json({ error: 'Failed to read Drive sync state' }, { status: 502 });
   }
 
-  const driveStore: BaseStore = driveData ? { thoughts: driveData.thoughts, insights: driveData.insights } : { thoughts: [], insights: [] };
+  const driveStore: BaseStore = driveData
+    ? {
+        thoughts: driveData.thoughts,
+        insights: driveData.insights,
+        featureRequestCategories: driveData.featureRequestCategories,
+        featureRequests: driveData.featureRequests,
+      }
+    : { thoughts: [], insights: [], featureRequestCategories: DEFAULT_FEATURE_REQUEST_CATEGORIES, featureRequests: [] };
 
   return Response.json({
     initialized: await hasDriveSyncHydrated(),
@@ -55,7 +68,12 @@ export async function POST() {
     const driveData = await readDriveBaseStore(session.accessToken);
 
     if (driveData && !localMeta.dirty) {
-      const driveStore: BaseStore = { thoughts: driveData.thoughts, insights: driveData.insights };
+      const driveStore: BaseStore = {
+        thoughts: driveData.thoughts,
+        insights: driveData.insights,
+        featureRequestCategories: driveData.featureRequestCategories,
+        featureRequests: driveData.featureRequests,
+      };
       const replacedLocal = !sameStore(cookieStore, driveStore);
 
       await setCookieBaseStore(driveStore);
@@ -107,6 +125,8 @@ export async function PUT() {
   await setCookieBaseStore({
     thoughts: driveData.thoughts,
     insights: driveData.insights,
+    featureRequestCategories: driveData.featureRequestCategories,
+    featureRequests: driveData.featureRequests,
   });
   await markCookieStoreSynced(driveData.updatedAt);
   await markDriveSyncHydrated();

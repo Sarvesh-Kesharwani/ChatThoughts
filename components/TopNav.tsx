@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const TABS = [
   { href: '/', label: 'Home' },
+  { href: '/conflicts', label: 'Conflicts in KG' },
   { href: '/template', label: 'Template' },
 ];
 
@@ -20,7 +21,7 @@ export function TopNav() {
             key={tab.href}
             href={tab.href}
             className={[
-              'btn',
+              'btn min-w-0',
               active ? 'border-blue-400 bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50',
             ].join(' ')}
           >
