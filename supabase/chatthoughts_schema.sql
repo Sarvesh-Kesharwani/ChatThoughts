@@ -1,6 +1,8 @@
 create extension if not exists pgcrypto;
 
-create table if not exists public.thoughts (
+create schema if not exists chatthoughts;
+
+create table if not exists chatthoughts.thoughts (
   id uuid primary key default gen_random_uuid(),
   need_when text not null check (char_length(need_when) <= 1000),
   mantra text not null check (char_length(mantra) <= 1000),
@@ -8,9 +10,9 @@ create table if not exists public.thoughts (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.thought_conflicts (
+create table if not exists chatthoughts.thought_conflicts (
   id uuid primary key default gen_random_uuid(),
-  existing_thought_id uuid references public.thoughts(id) on delete set null,
+  existing_thought_id uuid references chatthoughts.thoughts(id) on delete set null,
   existing_need_when text,
   existing_mantra text,
   candidate_need_when text not null check (char_length(candidate_need_when) <= 1000),
@@ -22,7 +24,7 @@ create table if not exists public.thought_conflicts (
   updated_at timestamptz not null default now()
 );
 
-create or replace function public.set_updated_at()
+create or replace function chatthoughts.set_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -32,23 +34,38 @@ begin
 end;
 $$;
 
-drop trigger if exists thoughts_set_updated_at on public.thoughts;
+drop trigger if exists thoughts_set_updated_at on chatthoughts.thoughts;
 create trigger thoughts_set_updated_at
-before update on public.thoughts
-for each row execute function public.set_updated_at();
+before update on chatthoughts.thoughts
+for each row execute function chatthoughts.set_updated_at();
 
-drop trigger if exists thought_conflicts_set_updated_at on public.thought_conflicts;
+drop trigger if exists thought_conflicts_set_updated_at on chatthoughts.thought_conflicts;
 create trigger thought_conflicts_set_updated_at
-before update on public.thought_conflicts
-for each row execute function public.set_updated_at();
+before update on chatthoughts.thought_conflicts
+for each row execute function chatthoughts.set_updated_at();
 
-alter table public.thoughts enable row level security;
-alter table public.thought_conflicts enable row level security;
+alter table chatthoughts.thoughts enable row level security;
+alter table chatthoughts.thought_conflicts enable row level security;
 
-revoke all on table public.thoughts from anon, authenticated;
-revoke all on table public.thought_conflicts from anon, authenticated;
-grant select, insert, update, delete on table public.thoughts to service_role;
-grant select, insert, update, delete on table public.thought_conflicts to service_role;
+grant usage on schema chatthoughts to anon, authenticated, service_role;
+grant select, insert, update, delete on table chatthoughts.thoughts to anon, authenticated, service_role;
+grant select, insert, update, delete on table chatthoughts.thought_conflicts to anon, authenticated, service_role;
 
-create index if not exists thoughts_updated_at_idx on public.thoughts(updated_at desc);
-create index if not exists thought_conflicts_status_updated_at_idx on public.thought_conflicts(status, updated_at desc);
+drop policy if exists thoughts_server_access on chatthoughts.thoughts;
+create policy thoughts_server_access
+on chatthoughts.thoughts
+for all
+to anon, authenticated
+using (true)
+with check (true);
+
+drop policy if exists thought_conflicts_server_access on chatthoughts.thought_conflicts;
+create policy thought_conflicts_server_access
+on chatthoughts.thought_conflicts
+for all
+to anon, authenticated
+using (true)
+with check (true);
+
+create index if not exists thoughts_updated_at_idx on chatthoughts.thoughts(updated_at desc);
+create index if not exists thought_conflicts_status_updated_at_idx on chatthoughts.thought_conflicts(status, updated_at desc);

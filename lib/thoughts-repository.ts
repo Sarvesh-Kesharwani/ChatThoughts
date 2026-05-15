@@ -4,6 +4,10 @@ import { findDuplicateThoughts, rankThoughts } from './deepseek';
 import { getSupabaseServerClient } from './supabase-server';
 import type { ThoughtCard, ThoughtConflict } from './thought-types';
 
+const APP_SCHEMA = 'chatthoughts';
+const THOUGHTS_TABLE = 'thoughts';
+const CONFLICTS_TABLE = 'thought_conflicts';
+
 interface ThoughtRow {
   id: string;
   need_when: string;
@@ -59,7 +63,8 @@ function cleanText(input: unknown, maxLength: number) {
 export async function listThoughts() {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
-    .from('thoughts')
+    .schema(APP_SCHEMA)
+    .from(THOUGHTS_TABLE)
     .select('id, need_when, mantra, created_at, updated_at')
     .order('updated_at', { ascending: false });
 
@@ -88,7 +93,8 @@ export async function addThoughtWithConflictCheck(input: { needWhen: unknown; ma
       status: 'open',
     }));
     const { data, error } = await supabase
-      .from('thought_conflicts')
+      .schema(APP_SCHEMA)
+      .from(CONFLICTS_TABLE)
       .insert(rows)
       .select(
         'id, existing_thought_id, existing_need_when, existing_mantra, candidate_need_when, candidate_mantra, status, resolved_need_when, resolved_mantra, created_at, updated_at',
@@ -99,7 +105,8 @@ export async function addThoughtWithConflictCheck(input: { needWhen: unknown; ma
   }
 
   const { data, error } = await supabase
-    .from('thoughts')
+    .schema(APP_SCHEMA)
+    .from(THOUGHTS_TABLE)
     .insert({ need_when: needWhen, mantra })
     .select('id, need_when, mantra, created_at, updated_at')
     .single();
@@ -117,7 +124,8 @@ export async function searchThoughts(query: string) {
 export async function listOpenConflicts() {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
-    .from('thought_conflicts')
+    .schema(APP_SCHEMA)
+    .from(CONFLICTS_TABLE)
     .select(
       'id, existing_thought_id, existing_need_when, existing_mantra, candidate_need_when, candidate_mantra, status, resolved_need_when, resolved_mantra, created_at, updated_at',
     )
@@ -135,7 +143,8 @@ export async function resolveConflict(id: string, input: { needWhen: unknown; ma
 
   const supabase = getSupabaseServerClient();
   const { data: conflict, error: conflictError } = await supabase
-    .from('thought_conflicts')
+    .schema(APP_SCHEMA)
+    .from(CONFLICTS_TABLE)
     .select(
       'id, existing_thought_id, existing_need_when, existing_mantra, candidate_need_when, candidate_mantra, status, resolved_need_when, resolved_mantra, created_at, updated_at',
     )
@@ -147,17 +156,19 @@ export async function resolveConflict(id: string, input: { needWhen: unknown; ma
 
   if (row.existing_thought_id) {
     const { error } = await supabase
-      .from('thoughts')
+      .schema(APP_SCHEMA)
+      .from(THOUGHTS_TABLE)
       .update({ need_when: needWhen, mantra, updated_at: new Date().toISOString() })
       .eq('id', row.existing_thought_id);
     if (error) throw new Error(error.message);
   } else {
-    const { error } = await supabase.from('thoughts').insert({ need_when: needWhen, mantra });
+    const { error } = await supabase.schema(APP_SCHEMA).from(THOUGHTS_TABLE).insert({ need_when: needWhen, mantra });
     if (error) throw new Error(error.message);
   }
 
   const { data, error } = await supabase
-    .from('thought_conflicts')
+    .schema(APP_SCHEMA)
+    .from(CONFLICTS_TABLE)
     .update({
       status: 'resolved',
       resolved_need_when: needWhen,

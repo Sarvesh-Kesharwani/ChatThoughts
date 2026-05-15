@@ -34,7 +34,7 @@ npm run dev:fresh
 - `GOOGLE_CLIENT_SECRET`
 - `CHATTHOUGHTS_PASSCODE`
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_ANON_KEY`
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_MODEL` (defaults to `deepseek-v4-flash`)
 
@@ -60,7 +60,7 @@ Drive scope used:
 ## Supabase
 
 Apply `supabase/chatthoughts_schema.sql` to create:
-- `public.thoughts`
-- `public.thought_conflicts`
+- `chatthoughts.thoughts`
+- `chatthoughts.thought_conflicts`
 
-The app uses the service role key only on the server.
+The app reads Supabase credentials only on the server.
