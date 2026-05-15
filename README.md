@@ -64,3 +64,4 @@ Apply `supabase/chatthoughts_schema.sql` to create:
 - `chatthoughts.thought_conflicts`
 
 The app reads Supabase credentials only on the server.
+The schema must be exposed through the Supabase Data API; `supabase/chatthoughts_schema.sql` sets `pgrst.db_schemas` to `public, chatthoughts`.

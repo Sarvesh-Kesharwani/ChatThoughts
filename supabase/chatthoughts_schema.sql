@@ -48,8 +48,12 @@ alter table chatthoughts.thoughts enable row level security;
 alter table chatthoughts.thought_conflicts enable row level security;
 
 grant usage on schema chatthoughts to anon, authenticated, service_role;
-grant select, insert, update, delete on table chatthoughts.thoughts to anon, authenticated, service_role;
-grant select, insert, update, delete on table chatthoughts.thought_conflicts to anon, authenticated, service_role;
+grant all on all tables in schema chatthoughts to anon, authenticated, service_role;
+grant all on all routines in schema chatthoughts to anon, authenticated, service_role;
+grant all on all sequences in schema chatthoughts to anon, authenticated, service_role;
+alter default privileges for role postgres in schema chatthoughts grant all on tables to anon, authenticated, service_role;
+alter default privileges for role postgres in schema chatthoughts grant all on routines to anon, authenticated, service_role;
+alter default privileges for role postgres in schema chatthoughts grant all on sequences to anon, authenticated, service_role;
 
 drop policy if exists thoughts_server_access on chatthoughts.thoughts;
 create policy thoughts_server_access
@@ -69,3 +73,7 @@ with check (true);
 
 create index if not exists thoughts_updated_at_idx on chatthoughts.thoughts(updated_at desc);
 create index if not exists thought_conflicts_status_updated_at_idx on chatthoughts.thought_conflicts(status, updated_at desc);
+
+alter role authenticator set pgrst.db_schemas = 'public, chatthoughts';
+notify pgrst, 'reload config';
+notify pgrst, 'reload schema';
