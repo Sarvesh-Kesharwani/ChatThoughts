@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const { passcode } = (await req.json().catch(() => ({}))) as {
     passcode?: string;
   };
-  const expected = process.env.APP_PASSCODE;
+  const expected = process.env.CHATTHOUGHTS_PASSCODE;
   if (!expected) {
     return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
   }

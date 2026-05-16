@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "ChatThoughts",
   description: "Situational mantras + KG conflict resolver",
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({

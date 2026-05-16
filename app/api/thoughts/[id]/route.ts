@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
+import {
+  supabase,
+  getOutputSchema,
+  encodeAugmented,
+  hydrateThought,
+} from "@/lib/supabase";
+import { augmentThought } from "@/lib/deepseek";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const patchSchema = z.object({
-  when_needed: z.string().min(1).max(500).optional(),
-  mantra: z.string().min(1).max(2000).optional(),
+  raw: z.string().min(1).max(5000).optional(),
 });
 
 export async function PATCH(
@@ -16,17 +22,23 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
-  if (!parsed.success || Object.keys(parsed.data).length === 0) {
+  if (!parsed.success || !parsed.data.raw) {
     return NextResponse.json({ error: "invalid input" }, { status: 400 });
   }
+
+  const schema = await getOutputSchema();
+  const augmented = await augmentThought(parsed.data.raw, schema);
+  const when_needed = typeof augmented.when_needed === "string" ? augmented.when_needed : null;
+  const mantra = encodeAugmented({ ...augmented, _raw: parsed.data.raw });
+
   const { data, error } = await supabase
-    .from("thoughts")
-    .update(parsed.data)
+    .from("chatthoughts_thoughts")
+    .update({ when_needed, mantra })
     .eq("id", id)
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ thought: data });
+  return NextResponse.json({ thought: hydrateThought(data) });
 }
 
 export async function DELETE(
@@ -34,7 +46,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { error } = await supabase.from("thoughts").delete().eq("id", id);
+  const { error } = await supabase.from("chatthoughts_thoughts").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

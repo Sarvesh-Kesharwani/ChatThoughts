@@ -5,28 +5,66 @@ import Nav from "@/components/Nav";
 
 type Thought = {
   id: string;
-  when_needed: string;
-  mantra: string;
+  raw: string | null;
+  augmented: Record<string, unknown> | null;
+  when_needed: string | null;
+  mantra: string | null;
   created_at: string;
   updated_at: string;
 };
 
 type SearchResult = Thought & { score: number; reason: string };
 
-export default function Dashboard() {
+type Field = { key: string; label: string; type: "string" | "array"; options?: string[] };
+type OutputSchema = { fields: Field[] };
+
+const DRAFT_KEY = "chatthoughts:draft:raw";
+
+function labelFor(schema: OutputSchema | null, key: string) {
+  const f = schema?.fields.find((x) => x.key === key);
+  if (f) return f.label;
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function renderValue(v: unknown) {
+  if (v == null) return null;
+  if (Array.isArray(v)) {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {v.map((x, i) => (
+          <span
+            key={i}
+            className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700"
+          >
+            {String(x)}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (typeof v === "object") {
+    return (
+      <pre className="text-xs bg-slate-50 rounded p-2 overflow-x-auto">
+        {JSON.stringify(v, null, 2)}
+      </pre>
+    );
+  }
+  return <div className="text-sm whitespace-pre-wrap text-slate-700">{String(v)}</div>;
+}
+
+export default function ThoughtsPage() {
   const [thoughts, setThoughts] = useState<Thought[]>([]);
+  const [schema, setSchema] = useState<OutputSchema | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [whenNeeded, setWhenNeeded] = useState("");
-  const [mantra, setMantra] = useState("");
+  const [raw, setRaw] = useState("");
   const [addMsg, setAddMsg] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
-  const [editWhen, setEditWhen] = useState("");
-  const [editMantra, setEditMantra] = useState("");
+  const [editRaw, setEditRaw] = useState("");
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const draftLoaded = useRef(false);
 
-  // chat state
   type ChatItem =
     | { role: "user"; text: string }
     | { role: "bot"; results: SearchResult[]; empty?: boolean };
@@ -34,11 +72,31 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
 
+  // Load draft on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const d = localStorage.getItem(DRAFT_KEY);
+    if (d) setRaw(d);
+    draftLoaded.current = true;
+  }, []);
+
+  // Save draft whenever raw changes (after initial load).
+  useEffect(() => {
+    if (!draftLoaded.current || typeof window === "undefined") return;
+    if (raw) localStorage.setItem(DRAFT_KEY, raw);
+    else localStorage.removeItem(DRAFT_KEY);
+  }, [raw]);
+
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/thoughts");
-    const j = await res.json();
-    setThoughts(j.thoughts ?? []);
+    const [tRes, sRes] = await Promise.all([
+      fetch("/api/thoughts"),
+      fetch("/api/settings"),
+    ]);
+    const tJson = await tRes.json();
+    const sJson = await sRes.json();
+    setThoughts(tJson.thoughts ?? []);
+    setSchema(sJson.output_schema ?? null);
     setLoading(false);
   }, []);
 
@@ -47,13 +105,13 @@ export default function Dashboard() {
   }, [load]);
 
   async function addThought() {
-    if (!whenNeeded.trim() || !mantra.trim()) return;
+    if (!raw.trim()) return;
     setAdding(true);
     setAddMsg(null);
     const res = await fetch("/api/thoughts", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ when_needed: whenNeeded, mantra }),
+      body: JSON.stringify({ raw }),
     });
     setAdding(false);
     if (!res.ok) {
@@ -62,8 +120,8 @@ export default function Dashboard() {
       return;
     }
     const j = await res.json();
-    setWhenNeeded("");
-    setMantra("");
+    setRaw("");
+    if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY);
     if (j.conflicts?.length) {
       setAddMsg(
         `Added. Found ${j.conflicts.length} possible duplicate/conflict — see "Conflicts in KG".`
@@ -78,7 +136,7 @@ export default function Dashboard() {
     const res = await fetch(`/api/thoughts/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ when_needed: editWhen, mantra: editMantra }),
+      body: JSON.stringify({ raw: editRaw }),
     });
     if (res.ok) {
       setEditId(null);
@@ -131,49 +189,70 @@ export default function Dashboard() {
     [thoughts]
   );
 
+  function renderAugmented(t: Thought) {
+    const aug = t.augmented ?? {};
+    const keys = schema?.fields.map((f) => f.key) ?? Object.keys(aug);
+    const extraKeys = Object.keys(aug).filter((k) => !keys.includes(k));
+    const allKeys = [...keys, ...extraKeys];
+    return (
+      <div className="space-y-3">
+        {allKeys.map((k) => {
+          const v = (aug as Record<string, unknown>)[k];
+          if (v == null) return null;
+          return (
+            <div key={k}>
+              <div className="text-[10px] text-indigo-600 uppercase tracking-wider mb-1">
+                {labelFor(schema, k)}
+              </div>
+              {renderValue(v)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen">
       <Nav />
       <div className="grid grid-cols-1 md:grid-cols-2 flex-1 overflow-hidden">
-        {/* LEFT: thoughts */}
-        <section className="border-r border-neutral-900 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-neutral-900 space-y-2">
-            <h2 className="font-semibold">New thought</h2>
-            <input
-              value={whenNeeded}
-              onChange={(e) => setWhenNeeded(e.target.value)}
-              placeholder="When will I need this?"
-              className="w-full rounded-lg bg-neutral-950 border border-neutral-800 px-3 py-2 outline-none focus:border-indigo-500"
-            />
+        {/* LEFT */}
+        <section className="border-r border-slate-200 flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-slate-200 space-y-2 bg-white">
+            <h2 className="font-semibold text-slate-900">New thought</h2>
+            <p className="text-xs text-slate-500">
+              Just dump it raw. AI will structure it on save. Draft autosaves.
+            </p>
             <textarea
-              value={mantra}
-              onChange={(e) => setMantra(e.target.value)}
-              placeholder="The mantra"
-              rows={3}
-              className="w-full rounded-lg bg-neutral-950 border border-neutral-800 px-3 py-2 outline-none focus:border-indigo-500 resize-none"
+              value={raw}
+              onChange={(e) => setRaw(e.target.value)}
+              placeholder="Type what's on your mind..."
+              rows={5}
+              className="w-full rounded-lg bg-white border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 resize-none"
             />
             <div className="flex items-center gap-3">
               <button
                 onClick={addThought}
-                disabled={adding || !whenNeeded.trim() || !mantra.trim()}
-                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 text-sm font-medium"
+                disabled={adding || !raw.trim()}
+                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
               >
-                {adding ? "Checking..." : "Add"}
+                {adding ? "Processing..." : "Add"}
               </button>
+              {raw.trim() && !adding && (
+                <span className="text-xs text-slate-500">Draft saved</span>
+              )}
               {addMsg && (
-                <span className="text-sm text-neutral-400">{addMsg}</span>
+                <span className="text-sm text-slate-500">{addMsg}</span>
               )}
             </div>
           </div>
           <div className="overflow-y-auto p-4 space-y-3">
-            <h3 className="text-xs uppercase tracking-wider text-neutral-500">
+            <h3 className="text-xs uppercase tracking-wider text-slate-500">
               All thoughts ({sorted.length})
             </h3>
-            {loading && (
-              <p className="text-sm text-neutral-500">Loading...</p>
-            )}
+            {loading && <p className="text-sm text-slate-500">Loading...</p>}
             {!loading && sorted.length === 0 && (
-              <p className="text-sm text-neutral-500">No thoughts yet.</p>
+              <p className="text-sm text-slate-500">No thoughts yet.</p>
             )}
             {sorted.map((t) => (
               <div
@@ -181,33 +260,31 @@ export default function Dashboard() {
                 ref={(el) => {
                   cardRefs.current[t.id] = el;
                 }}
-                className={`rounded-xl border border-neutral-800 bg-neutral-900 p-4 ${
+                className={`rounded-xl border border-slate-200 bg-white p-4 ${
                   highlightId === t.id ? "card-flash border-indigo-500" : ""
                 }`}
               >
                 {editId === t.id ? (
                   <div className="space-y-2">
-                    <input
-                      value={editWhen}
-                      onChange={(e) => setEditWhen(e.target.value)}
-                      className="w-full rounded bg-neutral-950 border border-neutral-800 px-2 py-1 text-sm"
-                    />
                     <textarea
-                      value={editMantra}
-                      onChange={(e) => setEditMantra(e.target.value)}
-                      rows={3}
-                      className="w-full rounded bg-neutral-950 border border-neutral-800 px-2 py-1 text-sm resize-none"
+                      value={editRaw}
+                      onChange={(e) => setEditRaw(e.target.value)}
+                      rows={5}
+                      className="w-full rounded bg-white border border-slate-200 px-2 py-1 text-sm resize-none"
                     />
+                    <p className="text-[11px] text-slate-500">
+                      Saving will re-run AI augmentation.
+                    </p>
                     <div className="flex gap-2">
                       <button
                         onClick={() => saveEdit(t.id)}
-                        className="text-sm rounded bg-indigo-600 px-3 py-1"
+                        className="text-sm rounded bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1"
                       >
                         Save
                       </button>
                       <button
                         onClick={() => setEditId(null)}
-                        className="text-sm text-neutral-400"
+                        className="text-sm text-slate-500"
                       >
                         Cancel
                       </button>
@@ -215,17 +292,33 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <>
-                    <div className="text-xs text-indigo-400 uppercase tracking-wider mb-1">
-                      When
-                    </div>
-                    <div className="text-sm mb-2">{t.when_needed}</div>
-                    <div className="text-xs text-indigo-400 uppercase tracking-wider mb-1">
-                      Mantra
-                    </div>
-                    <div className="text-sm whitespace-pre-wrap">
-                      {t.mantra}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-neutral-500">
+                    {t.augmented ? (
+                      renderAugmented(t)
+                    ) : (
+                      <>
+                        <div className="text-[10px] text-indigo-600 uppercase tracking-wider mb-1">
+                          When
+                        </div>
+                        <div className="text-sm mb-2">{t.when_needed}</div>
+                        <div className="text-[10px] text-indigo-600 uppercase tracking-wider mb-1">
+                          Mantra
+                        </div>
+                        <div className="text-sm whitespace-pre-wrap">
+                          {t.mantra}
+                        </div>
+                      </>
+                    )}
+                    {t.raw && (
+                      <details className="mt-3">
+                        <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-700">
+                          Original raw text
+                        </summary>
+                        <div className="mt-1 text-xs text-slate-600 whitespace-pre-wrap bg-slate-50 rounded p-2">
+                          {t.raw}
+                        </div>
+                      </details>
+                    )}
+                    <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                       <span>
                         Updated {new Date(t.updated_at).toLocaleDateString()}
                       </span>
@@ -233,16 +326,15 @@ export default function Dashboard() {
                         <button
                           onClick={() => {
                             setEditId(t.id);
-                            setEditWhen(t.when_needed);
-                            setEditMantra(t.mantra);
+                            setEditRaw(t.raw ?? t.mantra ?? "");
                           }}
-                          className="hover:text-white"
+                          className="hover:text-slate-900"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => delThought(t.id)}
-                          className="hover:text-red-400"
+                          className="hover:text-red-600"
                         >
                           Delete
                         </button>
@@ -255,17 +347,17 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* RIGHT: chat */}
-        <section className="flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-neutral-900">
-            <h2 className="font-semibold">Find a mantra</h2>
-            <p className="text-xs text-neutral-500">
+        {/* RIGHT */}
+        <section className="flex flex-col overflow-hidden bg-white">
+          <div className="p-4 border-b border-slate-200">
+            <h2 className="font-semibold text-slate-900">Find a mantra</h2>
+            <p className="text-xs text-slate-500">
               Describe your situation. Get top-3 relevant thoughts.
             </p>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {chat.length === 0 && (
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-slate-500">
                 Ask: &ldquo;I&apos;m overwhelmed by deadlines&rdquo;,
                 &ldquo;Feeling stuck creatively&rdquo;...
               </p>
@@ -273,48 +365,60 @@ export default function Dashboard() {
             {chat.map((item, i) =>
               item.role === "user" ? (
                 <div key={i} className="flex justify-end">
-                  <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2 text-sm">
+                  <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-indigo-600 text-white px-4 py-2 text-sm">
                     {item.text}
                   </div>
                 </div>
               ) : (
                 <div key={i} className="space-y-2">
                   {item.empty ? (
-                    <div className="text-sm text-neutral-500">
+                    <div className="text-sm text-slate-500">
                       No relevant thoughts found.
                     </div>
                   ) : (
-                    item.results.map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => scrollToCard(r.id)}
-                        className="block w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 hover:border-indigo-500 transition p-3"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="text-xs text-indigo-400 uppercase tracking-wider">
-                            When
+                    item.results.map((r) => {
+                      const aug = r.augmented ?? {};
+                      const when =
+                        (typeof aug.when_needed === "string" && aug.when_needed) ||
+                        r.when_needed ||
+                        "";
+                      const short =
+                        (typeof aug.short === "string" && aug.short) ||
+                        r.mantra ||
+                        r.raw ||
+                        "";
+                      return (
+                        <button
+                          key={r.id}
+                          onClick={() => scrollToCard(r.id)}
+                          className="block w-full text-left rounded-xl border border-slate-200 bg-white hover:border-indigo-400 transition p-3"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="text-[10px] text-indigo-600 uppercase tracking-wider">
+                              When
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              {(r.score * 100).toFixed(0)}% match
+                            </div>
                           </div>
-                          <div className="text-[10px] text-neutral-500">
-                            {(r.score * 100).toFixed(0)}% match
+                          <div className="text-sm mb-1 text-slate-800">{when}</div>
+                          <div className="text-xs text-slate-600 whitespace-pre-wrap line-clamp-3">
+                            {short}
                           </div>
-                        </div>
-                        <div className="text-sm mb-1">{r.when_needed}</div>
-                        <div className="text-xs text-neutral-400 whitespace-pre-wrap line-clamp-3">
-                          {r.mantra}
-                        </div>
-                        {r.reason && (
-                          <div className="mt-2 text-[11px] text-neutral-500 italic">
-                            {r.reason}
-                          </div>
-                        )}
-                      </button>
-                    ))
+                          {r.reason && (
+                            <div className="mt-2 text-[11px] text-slate-500 italic">
+                              {r.reason}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               )
             )}
             {searching && (
-              <div className="text-sm text-neutral-500">Searching...</div>
+              <div className="text-sm text-slate-500">Searching...</div>
             )}
           </div>
           <form
@@ -322,17 +426,17 @@ export default function Dashboard() {
               e.preventDefault();
               search();
             }}
-            className="p-4 border-t border-neutral-900 flex gap-2"
+            className="p-4 border-t border-slate-200 flex gap-2"
           >
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Describe your situation..."
-              className="flex-1 rounded-lg bg-neutral-950 border border-neutral-800 px-3 py-2 outline-none focus:border-indigo-500"
+              className="flex-1 rounded-lg bg-white border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500"
             />
             <button
               disabled={searching || !query.trim()}
-              className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 text-sm font-medium"
+              className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
             >
               Send
             </button>
