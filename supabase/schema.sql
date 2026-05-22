@@ -47,7 +47,8 @@ values (1, '{
     { "key": "when_needed", "label": "When user will need this thought/mantra", "type": "string" },
     { "key": "short", "label": "Shortened version of that thought", "type": "string" },
     { "key": "areas", "label": "Which parts of life this relates to", "type": "array", "options": ["study", "social life", "wife", "family", "money", "sleep", "mental peace", "bodybuilding", "general health", "career", "creativity"] }
-  ]
+  ],
+  "conflict_prompt": "Find existing thoughts that are duplicates (near-identical purpose and advice) or conflicts (same situation, contradictory advice). Ignore small wording differences. Return an empty list when there is no meaningful duplicate or contradiction."
 }'::jsonb)
 on conflict (id) do nothing;
 

@@ -18,7 +18,13 @@ const abilities: Ability[] = [
   {
     title: "Detect duplicate or conflicting thoughts",
     body:
-      "On add, the new thought is compared against your existing library. Near-identical thoughts get marked as duplicates; thoughts giving contradictory advice for the same situation get marked as conflicts. Both surface in the 'Conflicts in KG' tab for later review.",
+      "On add, the new thought is compared against your existing library using the configurable Settings prompt. Near-identical thoughts get marked as duplicates; thoughts giving contradictory advice for the same situation get marked as conflicts. Both surface in the 'Conflicts in KG' tab for later review.",
+    status: "live",
+  },
+  {
+    title: "AI categorize thoughts",
+    body:
+      "The Categories page gives each thought a generated title and tags, then groups thoughts into existing and newly suggested categories for focused review.",
     status: "live",
   },
   {

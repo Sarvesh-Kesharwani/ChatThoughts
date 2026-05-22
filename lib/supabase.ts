@@ -51,6 +51,13 @@ export type SchemaField = {
 };
 
 export type OutputSchema = { fields: SchemaField[] };
+export type AppSettings = {
+  output_schema: OutputSchema;
+  conflict_prompt: string;
+};
+
+export const DEFAULT_CONFLICT_PROMPT =
+  "Find existing thoughts that are duplicates (near-identical purpose and advice) or conflicts (same situation, contradictory advice). Ignore small wording differences. Return an empty list when there is no meaningful duplicate or contradiction.";
 
 export const DEFAULT_OUTPUT_SCHEMA: OutputSchema = {
   fields: [
@@ -77,20 +84,37 @@ export const DEFAULT_OUTPUT_SCHEMA: OutputSchema = {
   ],
 };
 
-export async function getOutputSchema(): Promise<OutputSchema> {
+export function normalizeSettings(raw: unknown): AppSettings {
+  const maybe = raw as Partial<OutputSchema> & { conflict_prompt?: unknown };
+  const output_schema =
+    maybe?.fields && Array.isArray(maybe.fields)
+      ? { fields: maybe.fields as SchemaField[] }
+      : DEFAULT_OUTPUT_SCHEMA;
+  const conflict_prompt =
+    typeof maybe?.conflict_prompt === "string" && maybe.conflict_prompt.trim()
+      ? maybe.conflict_prompt
+      : DEFAULT_CONFLICT_PROMPT;
+  return { output_schema, conflict_prompt };
+}
+
+export async function getSettings(): Promise<AppSettings> {
   try {
     const { data, error } = await supabase
       .from("chatthoughts_settings")
       .select("output_schema")
       .eq("id", 1)
       .maybeSingle();
-    if (error) return DEFAULT_OUTPUT_SCHEMA;
-    const s = data?.output_schema as OutputSchema | undefined;
-    if (s?.fields && Array.isArray(s.fields)) return s;
+    if (error) return normalizeSettings(DEFAULT_OUTPUT_SCHEMA);
+    return normalizeSettings(data?.output_schema);
   } catch {
     /* table may not exist yet */
   }
-  return DEFAULT_OUTPUT_SCHEMA;
+  return normalizeSettings(DEFAULT_OUTPUT_SCHEMA);
+}
+
+export async function getOutputSchema(): Promise<OutputSchema> {
+  const settings = await getSettings();
+  return settings.output_schema;
 }
 
 // Augmented JSON is stored inside the existing `mantra` column as a serialized

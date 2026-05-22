@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   supabase,
-  getOutputSchema,
+  getSettings,
   encodeAugmented,
   hydrateThought,
 } from "@/lib/supabase";
@@ -41,10 +41,10 @@ export async function POST(req: Request) {
   }
   const { raw } = parsed.data;
 
-  const schema = await getOutputSchema();
+  const { output_schema, conflict_prompt } = await getSettings();
   let augmented: Record<string, unknown>;
   try {
-    augmented = await augmentThought(raw, schema);
+    augmented = await augmentThought(raw, output_schema);
   } catch (e) {
     console.error("augment failed", e);
     return NextResponse.json({ error: "AI augmentation failed" }, { status: 502 });
@@ -80,7 +80,8 @@ export async function POST(req: Request) {
           id: t.id,
           raw: t.raw ?? null,
           augmented: t.augmented ?? null,
-        }))
+        })),
+        conflict_prompt
       );
     } catch (e) {
       console.error("conflict check failed", e);

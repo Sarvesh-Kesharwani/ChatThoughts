@@ -34,6 +34,7 @@ export default function Nav() {
         <span className="font-semibold mr-3 text-slate-900">ChatThoughts</span>
         {tab("/", "Thoughts")}
         {tab("/conflicts", "Conflicts in KG")}
+        {tab("/categories", "Categories")}
         {tab("/abilities", "Abilities")}
         {tab("/settings", "Settings")}
       </div>

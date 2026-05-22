@@ -1,6 +1,7 @@
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { DEFAULT_CONFLICT_PROMPT } from "@/lib/supabase";
 
 const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY! });
 const model = deepseek("deepseek-chat");
@@ -97,16 +98,54 @@ export type ConflictMatch = z.infer<typeof conflictSchema>["matches"];
 
 export async function findConflicts(
   candidate: { raw: string; augmented: Record<string, unknown> },
-  thoughts: RankInput[]
+  thoughts: RankInput[],
+  customPrompt = DEFAULT_CONFLICT_PROMPT
 ): Promise<ConflictMatch> {
   if (thoughts.length === 0) return [];
   const corpus = thoughts.map(thoughtToCorpus).join("\n---\n");
   const { object } = await generateObject({
     model,
     schema: conflictSchema,
-    system:
-      "Given a CANDIDATE thought, find existing thoughts that are duplicates (near-identical purpose+advice) or conflicts (same situation, contradictory advice). Empty array if none. Use ONLY supplied IDs.",
+    system: `${customPrompt.trim() || DEFAULT_CONFLICT_PROMPT}
+
+Hard rules: Given a CANDIDATE thought, find existing thoughts that are duplicates or conflicts. Empty array if none. Use ONLY supplied IDs. kind must be "duplicate" or "conflict".`,
     prompt: `CANDIDATE:\nRAW:${candidate.raw}\nAUGMENTED:${JSON.stringify(candidate.augmented)}\n\nEXISTING:\n${corpus}`,
   });
   return object.matches;
+}
+
+const categorySchema = z.object({
+  thought_labels: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      tags: z.array(z.string()).max(8),
+    })
+  ),
+  categories: z.array(
+    z.object({
+      name: z.string(),
+      kind: z.enum(["existing", "new"]),
+      thought_ids: z.array(z.string()),
+      reason: z.string(),
+    })
+  ),
+});
+
+export type CategorizeResult = z.infer<typeof categorySchema>;
+
+export async function categorizeThoughts(
+  thoughts: RankInput[],
+  existingCategories: string[]
+): Promise<CategorizeResult> {
+  if (thoughts.length === 0) return { thought_labels: [], categories: [] };
+  const corpus = thoughts.map(thoughtToCorpus).join("\n---\n");
+  const { object } = await generateObject({
+    model,
+    schema: categorySchema,
+    system:
+      "Categorize saved thoughts. Create concise titles and tags for every thought. Use existing categories when they fit, and add new categories when needed. A thought can belong to multiple categories. Use ONLY supplied IDs.",
+    prompt: `EXISTING CATEGORIES:\n${existingCategories.length ? existingCategories.join(", ") : "none"}\n\nTHOUGHTS:\n${corpus}`,
+  });
+  return object;
 }
