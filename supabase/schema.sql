@@ -103,9 +103,12 @@ drop trigger if exists chatthoughts_thought_labels_updated_at on chatthoughts_th
 create trigger chatthoughts_thought_labels_updated_at before update on chatthoughts_thought_labels
   for each row execute function chatthoughts_set_updated_at();
 
-alter table chatthoughts_thoughts enable row level security;
-alter table chatthoughts_conflicts enable row level security;
-alter table chatthoughts_settings enable row level security;
-alter table chatthoughts_categories enable row level security;
-alter table chatthoughts_thought_labels enable row level security;
-alter table chatthoughts_thought_categories enable row level security;
+-- The app gates access through Next.js passcode middleware and may use either
+-- the service-role key or anon key from server routes. Keep RLS disabled here
+-- so server-side Supabase reads do not silently return empty lists.
+alter table chatthoughts_thoughts disable row level security;
+alter table chatthoughts_conflicts disable row level security;
+alter table chatthoughts_settings disable row level security;
+alter table chatthoughts_categories disable row level security;
+alter table chatthoughts_thought_labels disable row level security;
+alter table chatthoughts_thought_categories disable row level security;
