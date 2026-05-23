@@ -139,13 +139,14 @@ export async function categorizeThoughts(
   existingCategories: string[]
 ): Promise<CategorizeResult> {
   if (thoughts.length === 0) return { thought_labels: [], categories: [] };
+  if (existingCategories.length === 0) return { thought_labels: [], categories: [] };
   const corpus = thoughts.map(thoughtToCorpus).join("\n---\n");
   const { object } = await generateObject({
     model,
     schema: categorySchema,
     system:
-      "Categorize saved thoughts. Create concise titles and tags for every thought. Use existing categories when they fit, and add new categories when needed. A thought can belong to multiple categories. Use ONLY supplied IDs.",
-    prompt: `EXISTING CATEGORIES:\n${existingCategories.length ? existingCategories.join(", ") : "none"}\n\nTHOUGHTS:\n${corpus}`,
+      "Categorize saved thoughts. Create concise titles and tags for every thought. Assign each thought only to the user's allowed categories. Never create new category names. A thought can belong to multiple categories when useful. Use ONLY supplied IDs and ONLY supplied category names.",
+    prompt: `ALLOWED CATEGORIES:\n${existingCategories.join(", ")}\n\nTHOUGHTS:\n${corpus}`,
   });
   return object;
 }

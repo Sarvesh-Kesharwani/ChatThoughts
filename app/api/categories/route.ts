@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { supabase, hydrateThought } from "@/lib/supabase";
 import { categorizeThoughts } from "@/lib/deepseek";
 
@@ -36,23 +37,25 @@ type MembershipRow = {
   category_id: string;
 };
 
-function stringsFrom(value: unknown) {
-  if (Array.isArray(value)) return value.filter((x): x is string => typeof x === "string");
-  if (typeof value === "string" && value.trim()) return [value.trim()];
-  return [];
-}
+const categoryNameSchema = z.string().trim().min(1).max(80);
+const putSchema = z.object({
+  categories: z.array(categoryNameSchema).max(50),
+});
+const deleteSchema = z.object({
+  name: categoryNameSchema,
+});
 
-function inferredCategories(thoughts: ThoughtRow[]) {
-  const names = new Set<string>();
-  for (const thought of thoughts) {
-    const aug = thought.augmented ?? {};
-    for (const key of ["areas", "area", "tags", "tag", "category", "categories"]) {
-      for (const name of stringsFrom((aug as Record<string, unknown>)[key])) {
-        names.add(name);
-      }
-    }
+function dedupeNames(names: string[]) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const rawName of names) {
+    const name = rawName.trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    output.push(name);
   }
-  return [...names].sort((a, b) => a.localeCompare(b));
+  return output;
 }
 
 async function loadState() {
@@ -99,8 +102,7 @@ async function loadState() {
       thought_ids: memberships
         .filter((membership) => membership.category_id === category.id)
         .map((membership) => membership.thought_id),
-    }))
-    .filter((category) => category.thought_ids.length > 0);
+    }));
 
   const labeledThoughts = new Set(labels.map((label) => label.thought_id));
   const memberThoughts = new Set(memberships.map((membership) => membership.thought_id));
@@ -109,9 +111,7 @@ async function loadState() {
   );
 
   return {
-    existing_categories: [
-      ...new Set([...categories.map((category) => category.name), ...inferredCategories(thoughts)]),
-    ].sort((a, b) => a.localeCompare(b)),
+    existing_categories: categories.map((category) => category.name),
     thought_labels: labels.map((label) => ({
       id: label.thought_id,
       title: label.title,
@@ -143,6 +143,12 @@ export async function POST() {
   const uncategorized = state.thoughts.filter((thought) =>
     state.uncategorized_ids.includes(thought.id)
   );
+  if (state.existing_categories.length === 0) {
+    return NextResponse.json(
+      { error: "Add at least one category before running AI categorization." },
+      { status: 400 }
+    );
+  }
   if (uncategorized.length === 0) {
     return NextResponse.json({ ...state, processed_count: 0 });
   }
@@ -178,27 +184,16 @@ export async function POST() {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const existingLower = new Set(state.existing_categories.map((name) => name.toLowerCase()));
-  const categoryRowMap = new Map<string, { name: string; kind: "existing" | "new"; reason: string }>();
-  for (const category of result.categories) {
-    const name = category.name.trim();
-    if (!name) continue;
-    categoryRowMap.set(name, {
-      name,
-      kind: existingLower.has(name.toLowerCase()) ? "existing" : category.kind,
-      reason: category.reason.trim(),
-    });
-  }
-  const categoryRows = [...categoryRowMap.values()];
-
-  if (categoryRows.length > 0) {
-    const { error } = await supabase
-      .from("chatthoughts_categories")
-      .upsert(categoryRows, { onConflict: "name" });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const categoryNames = [...new Set(categoryRows.map((category) => category.name))];
+  const allowedByLower = new Map(
+    state.existing_categories.map((name) => [name.toLowerCase(), name])
+  );
+  const categoryNames = [
+    ...new Set(
+      result.categories
+        .map((category) => allowedByLower.get(category.name.trim().toLowerCase()))
+        .filter((name): name is string => Boolean(name))
+    ),
+  ];
   const { data: savedCategories, error: categoryLoadError } = await supabase
     .from("chatthoughts_categories")
     .select("id, name")
@@ -214,7 +209,9 @@ export async function POST() {
     ])
   );
   const memberships = result.categories.flatMap((category) => {
-    const categoryId = categoryIdByName.get(category.name.trim());
+    const allowedName = allowedByLower.get(category.name.trim().toLowerCase());
+    if (!allowedName) return [];
+    const categoryId = categoryIdByName.get(allowedName);
     if (!categoryId) return [];
     return category.thought_ids
       .filter((id) => uncategorizedIds.has(id))
@@ -231,6 +228,47 @@ export async function POST() {
   try {
     const nextState = await loadState();
     return NextResponse.json({ ...nextState, processed_count: uncategorized.length });
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  const parsed = putSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid categories" }, { status: 400 });
+  }
+  const names = dedupeNames(parsed.data.categories);
+  if (names.length > 0) {
+    const rows = names.map((name) => ({
+      name,
+      kind: "existing" as const,
+      reason: "User category",
+    }));
+    const { error } = await supabase
+      .from("chatthoughts_categories")
+      .upsert(rows, { onConflict: "name" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  try {
+    return NextResponse.json(await loadState());
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  const parsed = deleteSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid category" }, { status: 400 });
+  }
+  const { error } = await supabase
+    .from("chatthoughts_categories")
+    .delete()
+    .ilike("name", parsed.data.name);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    return NextResponse.json(await loadState());
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

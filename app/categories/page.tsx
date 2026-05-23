@@ -55,6 +55,8 @@ export default function CategoriesPage() {
   const [selected, setSelected] = useState(UNCATEGORIZED);
   const [loading, setLoading] = useState(true);
   const [categorizing, setCategorizing] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +117,51 @@ export default function CategoriesPage() {
     );
   }
 
+  async function addCategory() {
+    const name = newCategory.trim();
+    if (!name) return;
+    setSavingCategory(true);
+    setError(null);
+    setMessage(null);
+    const names = [...categories.map((category) => category.name), name];
+    const res = await fetch("/api/categories", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ categories: names }),
+    });
+    setSavingCategory(false);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(json.error || "Failed to save category.");
+      return;
+    }
+    setNewCategory("");
+    applyState(json);
+    setMessage(`Added category "${name}".`);
+  }
+
+  async function deleteCategory(name: string) {
+    if (!confirm(`Delete category "${name}"? Thoughts in it will become uncategorized.`)) {
+      return;
+    }
+    setSavingCategory(true);
+    setError(null);
+    setMessage(null);
+    const res = await fetch("/api/categories", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    setSavingCategory(false);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(json.error || "Failed to delete category.");
+      return;
+    }
+    applyState(json);
+    setMessage(`Deleted category "${name}".`);
+  }
+
   const labelById = useMemo(
     () => new Map(labels.map((label) => [label.id, label])),
     [labels]
@@ -146,18 +193,26 @@ export default function CategoriesPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Categories</h1>
             <p className="text-sm text-slate-500">
-              Saved in Supabase. AI processes only uncategorized thoughts.
+              Create categories first. AI assigns uncategorized thoughts only to
+              your saved category names.
             </p>
           </div>
           <button
             onClick={categorize}
-            disabled={loading || categorizing || uncategorizedIds.length === 0}
+            disabled={
+              loading ||
+              categorizing ||
+              uncategorizedIds.length === 0 ||
+              categories.length === 0
+            }
             className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
           >
             {categorizing
               ? "Categorizing..."
               : uncategorizedIds.length
-                ? `AI categorize ${uncategorizedIds.length} uncategorized`
+                ? categories.length
+                  ? `AI categorize ${uncategorizedIds.length} uncategorized`
+                  : "Add categories first"
                 : "All thoughts categorized"}
           </button>
         </div>
@@ -184,9 +239,31 @@ export default function CategoriesPage() {
         {!loading && thoughts.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
             <aside className="rounded-xl border border-slate-200 bg-white p-3 h-fit">
-              <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">
-                Groups
-              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addCategory();
+                }}
+                className="mb-3 space-y-2"
+              >
+                <div className="text-xs uppercase tracking-wider text-slate-500">
+                  User categories
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    placeholder="Add category"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    disabled={savingCategory || !newCategory.trim()}
+                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+              </form>
               <div className="space-y-1">
                 <button
                   onClick={() => setSelected(UNCATEGORIZED)}
@@ -208,31 +285,43 @@ export default function CategoriesPage() {
                 </button>
 
                 {categories.map((category) => (
-                  <button
+                  <div
                     key={category.name}
-                    onClick={() => setSelected(category.name)}
                     className={`w-full text-left rounded-lg px-3 py-2 text-sm transition ${
                       selected === category.name
                         ? "bg-indigo-50 text-indigo-700"
                         : "hover:bg-slate-50 text-slate-700"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium truncate">{category.name}</span>
-                      <span
-                        className={`shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded-full ${
-                          category.kind === "existing"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
+                    <button
+                      type="button"
+                      onClick={() => setSelected(category.name)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{category.name}</span>
+                        <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                          user
+                        </span>
+                      </div>
+                    </button>
+                    <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => setSelected(category.name)}
+                        className="text-left"
                       >
-                        {category.kind}
-                      </span>
+                        {category.thought_ids.length} thoughts
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteCategory(category.name)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      {category.thought_ids.length} thoughts
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </aside>
@@ -250,10 +339,13 @@ export default function CategoriesPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <h2 className="font-semibold text-slate-900">{active.name}</h2>
                     <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                      {active.kind}
+                      user
                     </span>
                   </div>
-                  <p className="text-sm text-slate-500">{active.reason}</p>
+                  <p className="text-sm text-slate-500">
+                    AI can place uncategorized thoughts here because you created
+                    this category.
+                  </p>
                 </div>
               ) : null}
 
