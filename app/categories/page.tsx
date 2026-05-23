@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Nav from "@/components/Nav";
 
 type Thought = {
@@ -25,6 +25,17 @@ type Category = {
   reason: string;
 };
 
+type CategoryState = {
+  thoughts: Thought[];
+  thought_labels: ThoughtLabel[];
+  categories: Category[];
+  uncategorized_ids: string[];
+  uncategorized_count: number;
+  processed_count?: number;
+};
+
+const UNCATEGORIZED = "__uncategorized";
+
 function shortOf(t: Thought) {
   const aug = t.augmented ?? {};
   return (
@@ -40,24 +51,68 @@ export default function CategoriesPage() {
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [labels, setLabels] = useState<ThoughtLabel[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selected, setSelected] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [uncategorizedIds, setUncategorizedIds] = useState<string[]>([]);
+  const [selected, setSelected] = useState(UNCATEGORIZED);
+  const [loading, setLoading] = useState(true);
+  const [categorizing, setCategorizing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function categorize() {
+  const applyState = useCallback((json: CategoryState) => {
+    setThoughts(json.thoughts ?? []);
+    setLabels(json.thought_labels ?? []);
+    setCategories(json.categories ?? []);
+    setUncategorizedIds(json.uncategorized_ids ?? []);
+    const nextSelected =
+      (json.uncategorized_count ?? 0) > 0
+        ? UNCATEGORIZED
+        : json.categories?.[0]?.name ?? UNCATEGORIZED;
+    setSelected((current) => {
+      if (current === UNCATEGORIZED && (json.uncategorized_count ?? 0) > 0) {
+        return current;
+      }
+      if (json.categories?.some((category) => category.name === current)) {
+        return current;
+      }
+      return nextSelected;
+    });
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/categories", { method: "POST" });
+    const res = await fetch("/api/categories");
     setLoading(false);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(json.error || "Failed to load saved categories.");
+      return;
+    }
+    applyState(json);
+  }, [applyState]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function categorize() {
+    setCategorizing(true);
+    setError(null);
+    setMessage(null);
+    const res = await fetch("/api/categories", { method: "POST" });
+    setCategorizing(false);
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(json.error || "Failed to categorize thoughts.");
       return;
     }
-    setThoughts(json.thoughts ?? []);
-    setLabels(json.thought_labels ?? []);
-    setCategories(json.categories ?? []);
-    setSelected(json.categories?.[0]?.name ?? "");
+    applyState(json);
+    const processed = json.processed_count ?? 0;
+    setMessage(
+      processed > 0
+        ? `Categorized ${processed} uncategorized thoughts.`
+        : "No uncategorized thoughts left."
+    );
   }
 
   const labelById = useMemo(
@@ -68,11 +123,20 @@ export default function CategoriesPage() {
     () => new Map(thoughts.map((thought) => [thought.id, thought])),
     [thoughts]
   );
+  const uncategorizedThoughts = useMemo(
+    () =>
+      uncategorizedIds
+        .map((id) => thoughtById.get(id))
+        .filter((thought): thought is Thought => Boolean(thought)),
+    [thoughtById, uncategorizedIds]
+  );
   const active = categories.find((category) => category.name === selected) ?? null;
   const activeThoughts =
-    active?.thought_ids
-      .map((id) => thoughtById.get(id))
-      .filter((thought): thought is Thought => Boolean(thought)) ?? [];
+    selected === UNCATEGORIZED
+      ? uncategorizedThoughts
+      : active?.thought_ids
+          .map((id) => thoughtById.get(id))
+          .filter((thought): thought is Thought => Boolean(thought)) ?? [];
 
   return (
     <div className="flex flex-col h-screen">
@@ -82,16 +146,19 @@ export default function CategoriesPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Categories</h1>
             <p className="text-sm text-slate-500">
-              AI groups thoughts by generated titles and tags, reusing existing
-              categories when possible.
+              Saved in Supabase. AI processes only uncategorized thoughts.
             </p>
           </div>
           <button
             onClick={categorize}
-            disabled={loading}
+            disabled={loading || categorizing || uncategorizedIds.length === 0}
             className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
           >
-            {loading ? "Categorizing..." : "AI categorize thoughts"}
+            {categorizing
+              ? "Categorizing..."
+              : uncategorizedIds.length
+                ? `AI categorize ${uncategorizedIds.length} uncategorized`
+                : "All thoughts categorized"}
           </button>
         </div>
 
@@ -100,21 +167,46 @@ export default function CategoriesPage() {
             {error}
           </div>
         )}
-
-        {categories.length === 0 && !loading && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-            Run AI categorization to build category groups from your saved
-            thoughts.
+        {message && (
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {message}
           </div>
         )}
 
-        {categories.length > 0 && (
+        {loading && <p className="text-sm text-slate-500">Loading saved categories...</p>}
+
+        {!loading && thoughts.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+            No thoughts yet.
+          </div>
+        )}
+
+        {!loading && thoughts.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
             <aside className="rounded-xl border border-slate-200 bg-white p-3 h-fit">
               <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">
-                Categories ({categories.length})
+                Groups
               </div>
               <div className="space-y-1">
+                <button
+                  onClick={() => setSelected(UNCATEGORIZED)}
+                  className={`w-full text-left rounded-lg px-3 py-2 text-sm transition ${
+                    selected === UNCATEGORIZED
+                      ? "bg-indigo-50 text-indigo-700"
+                      : "hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium truncate">Uncategorized</span>
+                    <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                      queue
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {uncategorizedIds.length} thoughts
+                  </div>
+                </button>
+
                 {categories.map((category) => (
                   <button
                     key={category.name}
@@ -146,7 +238,14 @@ export default function CategoriesPage() {
             </aside>
 
             <section className="space-y-3">
-              {active && (
+              {selected === UNCATEGORIZED ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <h2 className="font-semibold text-slate-900">Uncategorized</h2>
+                  <p className="text-sm text-slate-500">
+                    These thoughts are the only ones sent to AI on the next run.
+                  </p>
+                </div>
+              ) : active ? (
                 <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <h2 className="font-semibold text-slate-900">{active.name}</h2>
@@ -155,6 +254,12 @@ export default function CategoriesPage() {
                     </span>
                   </div>
                   <p className="text-sm text-slate-500">{active.reason}</p>
+                </div>
+              ) : null}
+
+              {activeThoughts.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                  No thoughts in this group.
                 </div>
               )}
 

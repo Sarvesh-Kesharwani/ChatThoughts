@@ -34,6 +34,8 @@ create table if not exists chatthoughts_conflicts (
 );
 
 create index if not exists chatthoughts_conflicts_status_idx on chatthoughts_conflicts (status, created_at desc);
+create index if not exists chatthoughts_conflicts_thought_b_idx on chatthoughts_conflicts (thought_b);
+create index if not exists chatthoughts_conflicts_merged_id_idx on chatthoughts_conflicts (merged_id);
 
 create table if not exists chatthoughts_settings (
   id integer primary key default 1 check (id = 1),
@@ -52,9 +54,38 @@ values (1, '{
 }'::jsonb)
 on conflict (id) do nothing;
 
+create table if not exists chatthoughts_categories (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null unique,
+  kind text not null default 'new' check (kind in ('existing','new')),
+  reason text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists chatthoughts_categories_name_idx on chatthoughts_categories (name);
+
+create table if not exists chatthoughts_thought_labels (
+  thought_id uuid primary key references chatthoughts_thoughts(id) on delete cascade,
+  title text not null,
+  tags text[] not null default '{}',
+  categorized_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists chatthoughts_thought_categories (
+  thought_id uuid not null references chatthoughts_thoughts(id) on delete cascade,
+  category_id uuid not null references chatthoughts_categories(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (thought_id, category_id)
+);
+
+create index if not exists chatthoughts_thought_categories_category_idx
+  on chatthoughts_thought_categories (category_id);
+
 create or replace function chatthoughts_set_updated_at() returns trigger as $$
 begin new.updated_at = now(); return new; end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 drop trigger if exists chatthoughts_thoughts_updated_at on chatthoughts_thoughts;
 create trigger chatthoughts_thoughts_updated_at before update on chatthoughts_thoughts
@@ -64,6 +95,17 @@ drop trigger if exists chatthoughts_settings_updated_at on chatthoughts_settings
 create trigger chatthoughts_settings_updated_at before update on chatthoughts_settings
   for each row execute function chatthoughts_set_updated_at();
 
-alter table chatthoughts_thoughts disable row level security;
-alter table chatthoughts_conflicts disable row level security;
-alter table chatthoughts_settings disable row level security;
+drop trigger if exists chatthoughts_categories_updated_at on chatthoughts_categories;
+create trigger chatthoughts_categories_updated_at before update on chatthoughts_categories
+  for each row execute function chatthoughts_set_updated_at();
+
+drop trigger if exists chatthoughts_thought_labels_updated_at on chatthoughts_thought_labels;
+create trigger chatthoughts_thought_labels_updated_at before update on chatthoughts_thought_labels
+  for each row execute function chatthoughts_set_updated_at();
+
+alter table chatthoughts_thoughts enable row level security;
+alter table chatthoughts_conflicts enable row level security;
+alter table chatthoughts_settings enable row level security;
+alter table chatthoughts_categories enable row level security;
+alter table chatthoughts_thought_labels enable row level security;
+alter table chatthoughts_thought_categories enable row level security;
