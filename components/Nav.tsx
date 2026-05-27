@@ -36,6 +36,7 @@ export default function Nav() {
         {tab("/conflicts", "Conflicts in KG")}
         {tab("/categories", "Categories")}
         {tab("/abilities", "Abilities")}
+        {tab("/sacrifice", "Sacrifice")}
         {tab("/settings", "Settings")}
       </div>
       <button
