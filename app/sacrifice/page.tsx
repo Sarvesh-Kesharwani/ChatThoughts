@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Nav from "@/components/Nav";
 
 type BaliCard = {
@@ -15,47 +15,38 @@ type VardaanCard = BaliCard & {
 };
 
 const STORAGE_KEY = "chatthoughts:sacrifice:v1";
+const IMPORTED_KEY = "chatthoughts:sacrifice:imported:v1";
 
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function newId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function makeCard(text: string): BaliCard {
-  const ts = nowIso();
-  return {
-    id: newId(),
-    text,
-    createdAt: ts,
-    updatedAt: ts,
-  };
-}
-
-function saveCards(cards: VardaanCard[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
-}
-
-function loadCards(): VardaanCard[] {
+function loadLocalCards(): VardaanCard[] {
   if (typeof window === "undefined") return [];
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as VardaanCard[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((card) => ({
-      ...card,
-      sacrifices: Array.isArray(card.sacrifices) ? card.sacrifices : [],
-    }));
+    return parsed
+      .filter((card) => typeof card?.text === "string" && card.text.trim())
+      .map((card) => ({
+        ...card,
+        sacrifices: Array.isArray(card.sacrifices)
+          ? card.sacrifices.filter(
+              (sacrifice) =>
+                typeof sacrifice?.text === "string" && sacrifice.text.trim()
+            )
+          : [],
+      }));
   } catch {
     return [];
   }
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json.error || "Request failed");
+  }
+  return json as T;
 }
 
 export default function SacrificePage() {
@@ -67,38 +58,100 @@ export default function SacrificePage() {
   const [editingSacrificeId, setEditingSacrificeId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const importAttempted = useRef(false);
 
-  useEffect(() => {
-    const stored = loadCards();
-    setCards(stored);
-    setSelectedId(stored[0]?.id ?? null);
-    setLoaded(true);
+  const loadCards = useCallback(async () => {
+    setError(null);
+    const json = await requestJson<{ cards: VardaanCard[] }>("/api/sacrifice");
+    const nextCards = json.cards ?? [];
+    setCards(nextCards);
+    setSelectedId((current) => {
+      if (current && nextCards.some((card) => card.id === current)) return current;
+      return nextCards[0]?.id ?? null;
+    });
+    return nextCards;
+  }, []);
+
+  const importLocalCards = useCallback(async () => {
+    if (importAttempted.current || typeof window === "undefined") return false;
+    importAttempted.current = true;
+    if (localStorage.getItem(IMPORTED_KEY)) return false;
+
+    const localCards = loadLocalCards();
+    if (localCards.length === 0) return false;
+
+    for (const card of localCards) {
+      const created = await requestJson<{ card: BaliCard }>("/api/sacrifice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: card.text }),
+      });
+
+      for (const sacrifice of card.sacrifices) {
+        await requestJson<{ card: BaliCard }>("/api/sacrifice", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            text: sacrifice.text,
+            parent_id: created.card.id,
+          }),
+        });
+      }
+    }
+
+    localStorage.setItem(IMPORTED_KEY, "1");
+    return true;
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
-    saveCards(cards);
-  }, [cards, loaded]);
+    let cancelled = false;
+
+    async function boot() {
+      try {
+        const serverCards = await loadCards();
+        if (!cancelled && serverCards.length === 0) {
+          const imported = await importLocalCards();
+          if (imported) await loadCards();
+        }
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [importLocalCards, loadCards]);
 
   const selected = useMemo(
     () => cards.find((card) => card.id === selectedId) ?? null,
     [cards, selectedId]
   );
 
-  function updateCards(next: VardaanCard[]) {
-    setCards(next);
-    if (selectedId && !next.some((card) => card.id === selectedId)) {
-      setSelectedId(next[0]?.id ?? null);
-    }
-  }
-
-  function addVardaan() {
+  async function addVardaan() {
     const text = newVardaan.trim();
     if (!text) return;
-    const card = { ...makeCard(text), sacrifices: [] };
-    updateCards([card, ...cards]);
-    setSelectedId(card.id);
-    setNewVardaan("");
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await requestJson<{ card: BaliCard }>("/api/sacrifice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      setNewVardaan("");
+      setSelectedId(created.card.id);
+      await loadCards();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function startVardaanEdit(card: VardaanCard) {
@@ -107,39 +160,59 @@ export default function SacrificePage() {
     setEditText(card.text);
   }
 
-  function saveVardaanEdit(id: string) {
+  async function saveVardaanEdit(id: string) {
     const text = editText.trim();
     if (!text) return;
-    updateCards(
-      cards.map((card) =>
-        card.id === id ? { ...card, text, updatedAt: nowIso() } : card
-      )
-    );
-    setEditingVardaanId(null);
-    setEditText("");
+    setSaving(true);
+    setError(null);
+    try {
+      await requestJson(`/api/sacrifice/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      setEditingVardaanId(null);
+      setEditText("");
+      await loadCards();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function deleteVardaan(id: string) {
+  async function deleteVardaan(id: string) {
     if (!confirm("Delete this Vardaan/Goal and its Sacrifice/Bali cards?")) return;
-    updateCards(cards.filter((card) => card.id !== id));
+    setSaving(true);
+    setError(null);
+    try {
+      await requestJson(`/api/sacrifice/${id}`, { method: "DELETE" });
+      await loadCards();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function addSacrifice() {
+  async function addSacrifice() {
     const text = newSacrifice.trim();
     if (!text || !selected) return;
-    const sacrifice = makeCard(text);
-    updateCards(
-      cards.map((card) =>
-        card.id === selected.id
-          ? {
-              ...card,
-              sacrifices: [sacrifice, ...card.sacrifices],
-              updatedAt: nowIso(),
-            }
-          : card
-      )
-    );
-    setNewSacrifice("");
+    setSaving(true);
+    setError(null);
+    try {
+      await requestJson<{ card: BaliCard }>("/api/sacrifice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, parent_id: selected.id }),
+      });
+      setNewSacrifice("");
+      await loadCards();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function startSacrificeEdit(card: BaliCard) {
@@ -148,41 +221,38 @@ export default function SacrificePage() {
     setEditText(card.text);
   }
 
-  function saveSacrificeEdit(id: string) {
+  async function saveSacrificeEdit(id: string) {
     const text = editText.trim();
-    if (!text || !selected) return;
-    updateCards(
-      cards.map((card) =>
-        card.id === selected.id
-          ? {
-              ...card,
-              sacrifices: card.sacrifices.map((sacrifice) =>
-                sacrifice.id === id
-                  ? { ...sacrifice, text, updatedAt: nowIso() }
-                  : sacrifice
-              ),
-              updatedAt: nowIso(),
-            }
-          : card
-      )
-    );
-    setEditingSacrificeId(null);
-    setEditText("");
+    if (!text) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await requestJson(`/api/sacrifice/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      setEditingSacrificeId(null);
+      setEditText("");
+      await loadCards();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function deleteSacrifice(id: string) {
-    if (!selected) return;
-    updateCards(
-      cards.map((card) =>
-        card.id === selected.id
-          ? {
-              ...card,
-              sacrifices: card.sacrifices.filter((sacrifice) => sacrifice.id !== id),
-              updatedAt: nowIso(),
-            }
-          : card
-      )
-    );
+  async function deleteSacrifice(id: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await requestJson(`/api/sacrifice/${id}`, { method: "DELETE" });
+      await loadCards();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -204,6 +274,11 @@ export default function SacrificePage() {
                 {cards.length} cards
               </span>
             </div>
+            {error && (
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            )}
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -219,10 +294,10 @@ export default function SacrificePage() {
                 className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
               />
               <button
-                disabled={!newVardaan.trim()}
+                disabled={saving || !newVardaan.trim()}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
               >
-                Add Vardaan/Goal
+                {saving ? "Saving..." : "Add Vardaan/Goal"}
               </button>
             </form>
           </div>
@@ -254,7 +329,8 @@ export default function SacrificePage() {
                     <div className="flex gap-3">
                       <button
                         onClick={() => saveVardaanEdit(card.id)}
-                        className="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-500"
+                        disabled={saving}
+                        className="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
                       >
                         Save
                       </button>
@@ -289,7 +365,8 @@ export default function SacrificePage() {
                       </button>
                       <button
                         onClick={() => deleteVardaan(card.id)}
-                        className="text-slate-500 hover:text-red-600"
+                        disabled={saving}
+                        className="text-slate-500 hover:text-red-600 disabled:opacity-50"
                       >
                         Delete
                       </button>
@@ -337,10 +414,10 @@ export default function SacrificePage() {
                   className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
                 />
                 <button
-                  disabled={!newSacrifice.trim()}
+                  disabled={saving || !newSacrifice.trim()}
                   className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
                 >
-                  Add Sacrifice/Bali
+                  {saving ? "Saving..." : "Add Sacrifice/Bali"}
                 </button>
               </form>
             )}
@@ -383,7 +460,8 @@ export default function SacrificePage() {
                     <div className="flex gap-3">
                       <button
                         onClick={() => saveSacrificeEdit(sacrifice.id)}
-                        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
+                        disabled={saving}
+                        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
                       >
                         Save
                       </button>
@@ -411,7 +489,8 @@ export default function SacrificePage() {
                         </button>
                         <button
                           onClick={() => deleteSacrifice(sacrifice.id)}
-                          className="hover:text-red-600"
+                          disabled={saving}
+                          className="hover:text-red-600 disabled:opacity-50"
                         >
                           Delete
                         </button>

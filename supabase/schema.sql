@@ -83,6 +83,24 @@ create table if not exists chatthoughts_thought_categories (
 create index if not exists chatthoughts_thought_categories_category_idx
   on chatthoughts_thought_categories (category_id);
 
+create table if not exists chatthoughts_sacrifice_cards (
+  id uuid primary key default uuid_generate_v4(),
+  parent_id uuid references chatthoughts_sacrifice_cards(id) on delete cascade,
+  kind text not null check (kind in ('vardaan','sacrifice')),
+  text text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chatthoughts_sacrifice_cards_parent_check check (
+    (kind = 'vardaan' and parent_id is null)
+    or (kind = 'sacrifice' and parent_id is not null)
+  )
+);
+
+create index if not exists chatthoughts_sacrifice_cards_kind_updated_at_idx
+  on chatthoughts_sacrifice_cards (kind, updated_at desc);
+create index if not exists chatthoughts_sacrifice_cards_parent_idx
+  on chatthoughts_sacrifice_cards (parent_id, updated_at desc);
+
 create or replace function chatthoughts_set_updated_at() returns trigger as $$
 begin new.updated_at = now(); return new; end;
 $$ language plpgsql set search_path = public;
@@ -103,6 +121,10 @@ drop trigger if exists chatthoughts_thought_labels_updated_at on chatthoughts_th
 create trigger chatthoughts_thought_labels_updated_at before update on chatthoughts_thought_labels
   for each row execute function chatthoughts_set_updated_at();
 
+drop trigger if exists chatthoughts_sacrifice_cards_updated_at on chatthoughts_sacrifice_cards;
+create trigger chatthoughts_sacrifice_cards_updated_at before update on chatthoughts_sacrifice_cards
+  for each row execute function chatthoughts_set_updated_at();
+
 -- The app gates access through Next.js passcode middleware and may use either
 -- the service-role key or anon key from server routes. Keep RLS disabled here
 -- so server-side Supabase reads do not silently return empty lists.
@@ -112,3 +134,6 @@ alter table chatthoughts_settings disable row level security;
 alter table chatthoughts_categories disable row level security;
 alter table chatthoughts_thought_labels disable row level security;
 alter table chatthoughts_thought_categories disable row level security;
+alter table chatthoughts_sacrifice_cards disable row level security;
+
+grant all on table chatthoughts_sacrifice_cards to anon, authenticated, service_role;
