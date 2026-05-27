@@ -40,7 +40,7 @@ export async function augmentThought(raw: string, schema: OutputSchema) {
     model,
     schema: zSchema,
     system:
-      "You augment a user's raw 'thought' (a situational mantra or note-to-self) into structured fields. Be concise. For arrays of categories, choose only from the supplied options.",
+      "You augment a user's raw 'thought' (a situational mantra or note-to-self) into structured fields. Follow each field label exactly. Only shorten a field when the field key or label explicitly asks for a shortened version. If a field asks for a refined, cleaned, or crisped version without shortening, preserve the full meaning and avoid compressing it. For arrays of categories, choose only from the supplied options.",
     prompt: `RAW THOUGHT:\n${raw}\n\nFIELDS TO PRODUCE:\n${fieldHints}`,
   });
   return object as Record<string, unknown>;

@@ -130,8 +130,8 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-6 text-xs text-slate-500 space-y-1">
-          <p><strong>Note:</strong> changing the schema affects only thoughts added after the change. Existing rows keep their old shape.</p>
-          <p>Always include <code className="px-1 bg-slate-100 rounded">when_needed</code> (string) and <code className="px-1 bg-slate-100 rounded">short</code> (string) so search + cards render properly.</p>
+          <p><strong>Note:</strong> changing the schema affects only thoughts added after the change. Existing rows keep their old shape until you edit and save them again.</p>
+          <p>Include <code className="px-1 bg-slate-100 rounded">when_needed</code> (string). For the main text, use <code className="px-1 bg-slate-100 rounded">refined</code> when you want cleaned text without shortening, or <code className="px-1 bg-slate-100 rounded">short</code> only when you want a shortened version.</p>
         </div>
       </main>
     </div>

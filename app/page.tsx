@@ -383,6 +383,7 @@ export default function ThoughtsPage() {
                         r.when_needed ||
                         "";
                       const short =
+                        (typeof aug.refined === "string" && aug.refined) ||
                         (typeof aug.short === "string" && aug.short) ||
                         r.mantra ||
                         r.raw ||

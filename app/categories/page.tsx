@@ -39,6 +39,7 @@ const UNCATEGORIZED = "__uncategorized";
 function shortOf(t: Thought) {
   const aug = t.augmented ?? {};
   return (
+    (typeof aug.refined === "string" && aug.refined) ||
     (typeof aug.short === "string" && aug.short) ||
     (typeof aug.title === "string" && aug.title) ||
     t.mantra ||

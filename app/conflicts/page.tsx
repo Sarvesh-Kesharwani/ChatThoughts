@@ -28,7 +28,13 @@ function whenOf(t: ThoughtLite) {
 }
 function shortOf(t: ThoughtLite) {
   const aug = (t.augmented ?? {}) as Record<string, unknown>;
-  return (typeof aug.short === "string" && aug.short) || t.mantra || t.raw || "";
+  return (
+    (typeof aug.refined === "string" && aug.refined) ||
+    (typeof aug.short === "string" && aug.short) ||
+    t.mantra ||
+    t.raw ||
+    ""
+  );
 }
 
 export default function ConflictsPage() {
