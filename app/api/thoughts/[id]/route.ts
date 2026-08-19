@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const patchSchema = z.object({
-  raw: z.string().min(1).max(5000).optional(),
+  raw: z.string().min(1).optional(),
 });
 
 export async function PATCH(

@@ -15,6 +15,7 @@ Next.js 15 App Router · TS · Tailwind · Supabase JS · AI SDK v6 + `@ai-sdk/d
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project settings |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase project settings (server-only, secret) |
 | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
+| `DEEPSEEK_MODEL` | DeepSeek model id, e.g. `deepseek-v4-flash` (default) |
 
 Copy `.env.example` → `.env.local` and fill in.
 

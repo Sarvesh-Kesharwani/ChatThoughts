@@ -31,7 +31,7 @@ export async function GET() {
   return NextResponse.json({ thoughts });
 }
 
-const createSchema = z.object({ raw: z.string().min(1).max(5000) });
+const createSchema = z.object({ raw: z.string().min(1) });
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);

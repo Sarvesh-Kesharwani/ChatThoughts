@@ -8,7 +8,7 @@ export const maxDuration = 60;
 
 const schema = z.object({
   action: z.enum(["merge", "dismiss"]),
-  raw: z.string().min(1).max(5000).optional(),
+  raw: z.string().min(1).optional(),
   delete_originals: z.boolean().optional(),
 });
 
