@@ -254,19 +254,25 @@ export async function categorizeThoughts(
 }
 
 const observationSchema = z.object({
-  observations: z.array(z.string().min(1)).max(20),
+  summary: z.string().min(1),
+  main_points: z.array(z.string().min(1)).max(20),
+  other_points: z.array(z.string().min(1)).max(20),
 });
 
-export async function extractAtomicObservations(raw: string): Promise<string[]> {
+export async function extractAtomicObservations(raw: string) {
   const compressed = await compressForModel(raw);
   const { object } = await generateObject({
     model,
     schema: observationSchema,
     system:
-      "Convert the user's raw thought into small, standalone, atomic observations or strategies. Preserve meaning. One claim per point. Do not invent advice, merge unrelated claims, or add commentary.",
+      "Analyze a user's raw thought about one life channel. Return: (1) a short single-line summary, (2) main_points containing only reusable personal patterns, strategies, decision rules, mental models, or lessons about how the user should act, learn, practice, revise, remember, connect ideas, or improve, and (3) other_points containing context, news, examples, people/course comparisons, one-off facts, events, plans, or observations that are not reusable personal strategy. Preserve useful non-target content in other_points. Each point must be small, standalone, atomic, and faithful. Do not invent advice. A sentence such as 'others are adding AI courses faster' belongs in other_points; a sentence such as 'decide how much revision is needed and practice expanding a small idea through connections' belongs in main_points.",
     prompt: `RAW THOUGHT:\n${compressed}`,
   });
-  return object.observations.map((x) => x.trim()).filter(Boolean);
+  return {
+    summary: object.summary.trim(),
+    main_points: object.main_points.map((x) => x.trim()).filter(Boolean),
+    other_points: object.other_points.map((x) => x.trim()).filter(Boolean),
+  };
 }
 
 const ruleConflictSchema = z.object({

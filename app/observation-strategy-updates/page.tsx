@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Nav from "@/components/Nav";
 
 const CHANNELS = ["Study", "GameDev", "Relaxation/Sleep", "Gym", "English"] as const;
 type Channel = (typeof CHANNELS)[number];
-type Thought = { id: string; raw: string; points: string[]; added_point_indexes: number[]; status: "pending" | "awaiting_decision" | "resolved"; created_at: string };
+type Thought = { id: string; raw: string; summary: string | null; points: string[]; other_points: string[] | null; added_point_indexes: number[]; status: "pending" | "awaiting_decision" | "resolved"; created_at: string };
 type Version = { id: string; version: number; text: string; change_kind: string; source_thought_id: string | null; created_at: string };
 type Rule = { id: string; text: string; current_version: number; updated_at: string; chatthoughts_rule_versions?: Version[] };
 type Conflict = { thought_point_index: number; rule_id: string; reason: string };
@@ -26,6 +26,8 @@ export default function ObservationStrategyUpdatesPage() {
   const [question, setQuestion] = useState("");
   const [chatting, setChatting] = useState(false);
   const [chat, setChat] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  const [highlightThoughtId, setHighlightThoughtId] = useState<string | null>(null);
+  const thoughtRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +91,18 @@ export default function ObservationStrategyUpdatesPage() {
 
   const pending = useMemo(() => thoughts.filter((thought) => thought.status !== "resolved"), [thoughts]);
 
+  function openSourceThought(id: string) {
+    const element = thoughtRefs.current[id];
+    if (!element) { setMessage("Source thought is no longer available in this channel."); return; }
+    setHighlightThoughtId(id);
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setHighlightThoughtId((current) => current === id ? null : current), 1800);
+  }
+
+  function thoughtSummary(thought: Thought) {
+    return thought.summary?.trim() || thought.raw.replace(/\s+/g, " ").trim();
+  }
+
   return <div className="h-screen flex flex-col bg-slate-50">
     <Nav />
     <header className="bg-white border-b border-slate-200 px-4">
@@ -111,9 +125,13 @@ export default function ObservationStrategyUpdatesPage() {
           <h2 className="text-xs uppercase tracking-wider text-slate-500">{channel} thoughts ({thoughts.length})</h2>
           {loading && <p className="text-sm text-slate-500">Loading...</p>}
           {!loading && thoughts.length === 0 && <p className="text-sm text-slate-500">No thoughts recorded in this channel.</p>}
-          {thoughts.map((thought) => <article key={thought.id} className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-800 whitespace-pre-wrap">{thought.raw}</p>
-            <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Atomic observations ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-1 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index}>{point}</li>)}</ol></details>
+          {thoughts.map((thought) => <article key={thought.id} ref={(element) => { thoughtRefs.current[thought.id] = element; }} className={`rounded-xl border bg-white p-4 transition ${highlightThoughtId === thought.id ? "border-indigo-500 card-flash" : "border-slate-200"}`}>
+            <details>
+              <summary className="cursor-pointer list-none flex items-center gap-2"><span className="text-sm text-slate-800 truncate flex-1">{thoughtSummary(thought)}</span><span className="text-[11px] text-indigo-600 shrink-0">Open</span></summary>
+              <div className="mt-3 border-t border-slate-100 pt-3"><div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Original thought</div><p className="text-sm text-slate-700 whitespace-pre-wrap">{thought.raw}</p></div>
+            </details>
+            <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main strategy points ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-1 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index}>{point}</li>)}</ol></details>
+            {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other points ({thought.other_points!.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-1 text-xs text-slate-500">{thought.other_points!.map((point, index) => <li key={index}>{point}</li>)}</ol></details>}
             <div className="mt-3 flex justify-between text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div>
           </article>)}
         </div>
@@ -129,7 +147,7 @@ export default function ObservationStrategyUpdatesPage() {
         <div className="flex-1 overflow-y-auto p-4">
           {rightTab === "rules" ? <div>
             {rules.length === 0 ? <div className="h-48 grid place-items-center text-center"><div><p className="text-sm text-slate-500">RuleBook is empty.</p><p className="text-xs text-slate-400 mt-1">New unique observations will appear here.</p></div></div> : <ol className="space-y-3">
-              {rules.map((rule, index) => <li key={rule.id} className="flex gap-3 rounded-xl border border-slate-200 p-4"><span className="shrink-0 w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 grid place-items-center text-xs font-semibold">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-sm text-slate-800">{rule.text}</p><details className="mt-2"><summary className="text-[11px] text-slate-500 cursor-pointer">Version {rule.current_version} · history</summary><div className="mt-2 space-y-2">{[...(rule.chatthoughts_rule_versions ?? [])].sort((a,b) => b.version-a.version).map((version) => <div key={version.id} className="border-l-2 border-slate-200 pl-3 text-xs"><div className="text-slate-500">v{version.version} · {version.change_kind} · {new Date(version.created_at).toLocaleString()}</div><div className="text-slate-700 mt-0.5">{version.text}</div>{version.source_thought_id && <div className="text-[10px] text-slate-400 mt-0.5">Source thought: {version.source_thought_id}</div>}</div>)}</div></details></div></li>)}
+              {rules.map((rule, index) => <li key={rule.id} className="flex gap-3 rounded-xl border border-slate-200 p-4"><span className="shrink-0 w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 grid place-items-center text-xs font-semibold">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-sm text-slate-800">{rule.text}</p><details className="mt-2"><summary className="text-[11px] text-slate-500 cursor-pointer">Version {rule.current_version} · history</summary><div className="mt-2 space-y-2">{[...(rule.chatthoughts_rule_versions ?? [])].sort((a,b) => b.version-a.version).map((version) => <div key={version.id} className="border-l-2 border-slate-200 pl-3 text-xs"><div className="text-slate-500">v{version.version} · {version.change_kind} · {new Date(version.created_at).toLocaleString()}</div><div className="text-slate-700 mt-0.5">{version.text}</div>{version.source_thought_id && <button onClick={() => openSourceThought(version.source_thought_id!)} className="block text-left text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline mt-0.5">Source thought: {version.source_thought_id}</button>}</div>)}</div></details></div></li>)}
             </ol>}
           </div> : rightTab === "conflicts" ? <div className="space-y-4">
             {pending.length === 0 && <div className="h-48 grid place-items-center text-sm text-slate-500">No unresolved conflicts.</div>}

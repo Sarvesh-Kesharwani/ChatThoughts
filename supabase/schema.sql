@@ -144,13 +144,17 @@ create table if not exists chatthoughts_observation_thoughts (
   id uuid primary key default uuid_generate_v4(),
   channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English')),
   raw text not null,
+  summary text,
   points jsonb not null default '[]'::jsonb,
+  other_points jsonb not null default '[]'::jsonb,
   added_point_indexes jsonb not null default '[]'::jsonb,
   status text not null default 'pending' check (status in ('pending','awaiting_decision','resolved')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 alter table chatthoughts_observation_thoughts add column if not exists added_point_indexes jsonb not null default '[]'::jsonb;
+alter table chatthoughts_observation_thoughts add column if not exists summary text;
+alter table chatthoughts_observation_thoughts add column if not exists other_points jsonb not null default '[]'::jsonb;
 
 create table if not exists chatthoughts_rules (
   id uuid primary key default uuid_generate_v4(),
