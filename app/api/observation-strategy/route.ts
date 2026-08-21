@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { compareObservationsWithRulebook, extractAtomicObservations } from "@/lib/deepseek";
+import { extractAndCompareObservations } from "@/lib/deepseek";
 import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -23,24 +23,23 @@ export async function GET(req: Request) {
 const createSchema = z.object({ channel: channelSchema, raw: z.string().trim().min(1) });
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid input" }, { status: 400 });
-  let extracted: Awaited<ReturnType<typeof extractAtomicObservations>>;
-  try { extracted = await extractAtomicObservations(parsed.data.raw, parsed.data.channel); }
-  catch (error) { console.error("observation extraction failed", error); return NextResponse.json({ error: "AI processing failed" }, { status: 502 }); }
-  const points = extracted.main_points;
   const { data: currentRules, error: rulesError } = await supabase.from("chatthoughts_rules")
     .select("id,text").eq("channel", parsed.data.channel).eq("is_active", true);
   if (rulesError) return NextResponse.json({ error: rulesError.message }, { status: 500 });
-  let comparison;
-  try { comparison = await compareObservationsWithRulebook(points, currentRules ?? []); }
-  catch (error) { console.error("rule comparison failed", error); return NextResponse.json({ error: "AI comparison failed" }, { status: 502 }); }
+  let processed: Awaited<ReturnType<typeof extractAndCompareObservations>>;
+  try { processed = await extractAndCompareObservations(parsed.data.raw, parsed.data.channel, currentRules ?? []); }
+  catch (error) { console.error("observation processing failed", { channel: parsed.data.channel, durationMs: Date.now() - startedAt, error }); return NextResponse.json({ error: "AI processing failed" }, { status: 502 }); }
+  const points = processed.main_points;
   const { data, error } = await supabase.from("chatthoughts_observation_thoughts")
-    .insert({ ...parsed.data, summary: extracted.summary, points, other_points: extracted.other_points, added_point_indexes: comparison.non_conflicting_point_indexes, status: comparison.conflicts.length ? "pending" : "resolved" }).select("*").single();
+    .insert({ ...parsed.data, summary: processed.summary, points, other_points: processed.other_points, added_point_indexes: processed.non_conflicting_point_indexes, status: processed.conflicts.length ? "pending" : "resolved" }).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  for (const index of comparison.non_conflicting_point_indexes) {
+  for (const index of processed.non_conflicting_point_indexes) {
     const { data: rule, error: ruleError } = await supabase.from("chatthoughts_rules").insert({ channel: parsed.data.channel, text: points[index], source_thought_id: data.id }).select("*").single();
     if (!ruleError && rule) await supabase.from("chatthoughts_rule_versions").insert({ rule_id: rule.id, version: 1, text: rule.text, source_thought_id: data.id, change_kind: "created" });
   }
-  return NextResponse.json({ thought: data, added: comparison.non_conflicting_point_indexes.length, needs_review: comparison.conflicts.length > 0 });
+  console.info("observation thought created", { channel: parsed.data.channel, thoughtId: data.id, added: processed.non_conflicting_point_indexes.length, conflicts: processed.conflicts.length, durationMs: Date.now() - startedAt });
+  return NextResponse.json({ thought: data, added: processed.non_conflicting_point_indexes.length, needs_review: processed.conflicts.length > 0 });
 }

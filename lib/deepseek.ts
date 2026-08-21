@@ -318,6 +318,58 @@ const ruleConflictSchema = z.object({
   non_conflicting_point_indexes: z.array(z.number().int().nonnegative()),
 });
 
+const observationAndConflictSchema = observationSchema.extend({
+  conflicts: ruleConflictSchema.shape.conflicts,
+  non_conflicting_point_indexes: ruleConflictSchema.shape.non_conflicting_point_indexes,
+});
+
+export async function extractAndCompareObservations(
+  raw: string,
+  channel: string,
+  rules: { id: string; text: string }[]
+) {
+  const compressed = await compressForModel(raw);
+  const { object } = await generateObject({
+    model,
+    schema: observationAndConflictSchema,
+    system: `Summarize and structure the user's raw thought for the ${channel} channel, then compare its Main paragraphs with the latest RuleBook in the same response.
+
+Return summary, main_points, other_points, conflicts, and non_conflicting_point_indexes.
+
+VOICE AND STRUCTURE:
+- Preserve the user's speaking style, wording, keywords, sentence flow, and vocabulary. Their keywords are memory triggers.
+- Remove only obvious repetition, filler, and transcript noise. Do not polish into AI language or copy the raw thought unchanged.
+- Produce a few concise, small, complete paragraphs. Keep each reasoning chain together: problem -> reasoning -> implication -> solution -> next step.
+- summary is one short line in the user's own language and style.
+- main_points contains central insights, reasoning, strategies, conclusions, and intended actions relevant to ${channel}.
+- other_points contains surrounding or unrelated context. If context is necessary for a main reasoning chain, keep it in Main.
+
+RULEBOOK COMPARISON:
+- A conflict is mutually incompatible guidance or conclusions. Return every conflicting pair using only supplied rule IDs and zero-based Main paragraph indexes.
+- Put only genuinely novel, non-conflicting complete Main paragraphs in non_conflicting_point_indexes.
+- Omit duplicates, paraphrases, and paragraphs already fully covered by a rule; do not call them conflicts.
+- If the RuleBook is empty, conflicts must be empty and every Main paragraph index must be non-conflicting.
+- Never invent advice, rules, IDs, or indexes.`,
+    prompt: `RAW THOUGHT:\n${compressed}\n\nLATEST RULEBOOK:\n${
+      rules.length ? rules.map((rule) => `${rule.id}: ${rule.text}`).join("\n") : "(empty)"
+    }`,
+  });
+  const mainPoints = object.main_points.map((x) => x.trim()).filter(Boolean);
+  const validIndexes = new Set(mainPoints.map((_, index) => index));
+  const validRuleIds = new Set(rules.map((rule) => rule.id));
+  return {
+    summary: object.summary.trim(),
+    main_points: mainPoints,
+    other_points: object.other_points.map((x) => x.trim()).filter(Boolean),
+    conflicts: object.conflicts.filter(
+      (item) => validIndexes.has(item.thought_point_index) && validRuleIds.has(item.rule_id)
+    ),
+    non_conflicting_point_indexes: rules.length === 0
+      ? mainPoints.map((_, index) => index)
+      : [...new Set(object.non_conflicting_point_indexes)].filter((index) => validIndexes.has(index)),
+  };
+}
+
 export async function compareObservationsWithRulebook(
   observations: string[],
   rules: { id: string; text: string }[]

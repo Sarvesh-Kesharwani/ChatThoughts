@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { compareObservationsWithRulebook, extractAtomicObservations } from "@/lib/deepseek";
+import { extractAndCompareObservations } from "@/lib/deepseek";
 import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -14,10 +14,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .single();
   if (thoughtError || !thought) return NextResponse.json({ error: thoughtError?.message || "Thought not found" }, { status: 404 });
 
-  let extracted: Awaited<ReturnType<typeof extractAtomicObservations>>;
-  try { extracted = await extractAtomicObservations(thought.raw, thought.channel); }
-  catch (error) { console.error("thought reprocessing failed", error); return NextResponse.json({ error: "AI reprocessing failed" }, { status: 502 }); }
-
   const { data: rules, error: rulesError } = await supabase
     .from("chatthoughts_rules")
     .select("id,text,chatthoughts_rule_versions(version,source_thought_id)")
@@ -30,8 +26,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }).map((rule) => rule.id));
   const comparisonRules = (rules ?? []).filter((rule) => !ownRuleIds.has(rule.id)).map((rule) => ({ id: rule.id, text: rule.text }));
 
-  let comparison;
-  try { comparison = await compareObservationsWithRulebook(extracted.main_points, comparisonRules); }
+  let processed: Awaited<ReturnType<typeof extractAndCompareObservations>>;
+  try { processed = await extractAndCompareObservations(thought.raw, thought.channel, comparisonRules); }
   catch (error) { console.error("reprocessed rule comparison failed", error); return NextResponse.json({ error: "AI comparison failed" }, { status: 502 }); }
 
   if (ownRuleIds.size) {
@@ -39,8 +35,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (archiveError) return NextResponse.json({ error: archiveError.message }, { status: 500 });
   }
 
-  for (const index of comparison.non_conflicting_point_indexes) {
-    const text = extracted.main_points[index];
+  for (const index of processed.non_conflicting_point_indexes) {
+    const text = processed.main_points[index];
     const { data: rule, error } = await supabase
       .from("chatthoughts_rules")
       .insert({ channel: thought.channel, text, source_thought_id: id })
@@ -57,14 +53,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  const status = comparison.conflicts.length ? "pending" : "resolved";
+  const status = processed.conflicts.length ? "pending" : "resolved";
   const { data: updated, error: updateError } = await supabase
     .from("chatthoughts_observation_thoughts")
     .update({
-      summary: extracted.summary,
-      points: extracted.main_points,
-      other_points: extracted.other_points,
-      added_point_indexes: comparison.non_conflicting_point_indexes,
+      summary: processed.summary,
+      points: processed.main_points,
+      other_points: processed.other_points,
+      added_point_indexes: processed.non_conflicting_point_indexes,
       status,
     })
     .eq("id", id)
@@ -74,7 +70,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   return NextResponse.json({
     thought: updated,
-    added: comparison.non_conflicting_point_indexes.length,
-    needs_review: comparison.conflicts.length > 0,
+    added: processed.non_conflicting_point_indexes.length,
+    needs_review: processed.conflicts.length > 0,
   });
 }
