@@ -27,6 +27,7 @@ export default function ObservationStrategyUpdatesPage() {
   const [chatting, setChatting] = useState(false);
   const [chat, setChat] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [highlightThoughtId, setHighlightThoughtId] = useState<string | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const thoughtRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const load = useCallback(async () => {
@@ -89,6 +90,17 @@ export default function ObservationStrategyUpdatesPage() {
     load();
   }
 
+  async function reprocessThought(thought: Thought) {
+    setReprocessingId(thought.id); setMessage("");
+    const res = await fetch(`/api/observation-strategy/${thought.id}/reprocess`, { method: "POST" });
+    const json = await res.json().catch(() => ({}));
+    setReprocessingId(null);
+    if (!res.ok) { setMessage(json.error || "Could not re-update RuleBook."); return; }
+    setMessage(`Thought reprocessed. ${json.added} new RuleBook point${json.added === 1 ? "" : "s"} added.${json.needs_review ? " Conflicting point needs review." : ""}`);
+    if (json.needs_review) setRightTab("conflicts");
+    load();
+  }
+
   const pending = useMemo(() => thoughts.filter((thought) => thought.status !== "resolved"), [thoughts]);
   const otherPoints = useMemo(() => thoughts.flatMap((thought) => (thought.other_points ?? []).map((text) => ({ text, thoughtId: thought.id }))), [thoughts]);
 
@@ -133,7 +145,7 @@ export default function ObservationStrategyUpdatesPage() {
             </details>
             <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main — Study Strategy Related ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>
             {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other Points ({thought.other_points!.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-500">{thought.other_points!.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>}
-            <div className="mt-3 flex justify-between text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><div className="flex items-center gap-3"><button onClick={() => reprocessThought(thought)} disabled={reprocessingId === thought.id} className="text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50">{reprocessingId === thought.id ? "Re-updating..." : "Re-update RuleBook"}</button><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div></div>
           </article>)}
         </div>
       </section>
