@@ -29,6 +29,7 @@ export default function ObservationStrategyUpdatesPage() {
   const [highlightThoughtId, setHighlightThoughtId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
   const [moveTargets, setMoveTargets] = useState<Record<string, Channel>>({});
   const thoughtRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -115,6 +116,17 @@ export default function ObservationStrategyUpdatesPage() {
     load();
   }
 
+  async function deleteRule(rule: Rule) {
+    if (!window.confirm("Delete this RuleBook point? Its version history will be preserved.")) return;
+    setDeletingRuleId(rule.id); setMessage("");
+    const res = await fetch(`/api/observation-strategy/rules/${rule.id}`, { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    setDeletingRuleId(null);
+    if (!res.ok) { setMessage(json.error || "Could not delete RuleBook point."); return; }
+    setMessage("RuleBook point deleted. History preserved.");
+    load();
+  }
+
   const pending = useMemo(() => thoughts.filter((thought) => thought.status !== "resolved"), [thoughts]);
   const otherPoints = useMemo(() => thoughts.flatMap((thought) => (thought.other_points ?? []).map((text) => ({ text, thoughtId: thought.id }))), [thoughts]);
 
@@ -175,7 +187,7 @@ export default function ObservationStrategyUpdatesPage() {
           {rightTab === "rules" ? <div>
             <h3 className="text-xs uppercase tracking-wider text-indigo-700 mb-3">Main — Study Strategy Related ({rules.length})</h3>
             {rules.length === 0 ? <div className="h-32 grid place-items-center text-center"><div><p className="text-sm text-slate-500">No study-strategy points yet.</p><p className="text-xs text-slate-400 mt-1">New unique strategy reasoning will appear here.</p></div></div> : <ol className="space-y-3">
-              {rules.map((rule, index) => <li key={rule.id} className="flex gap-3 rounded-xl border border-slate-200 p-4"><span className="shrink-0 w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 grid place-items-center text-xs font-semibold">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-sm text-slate-800">{rule.text}</p><details className="mt-2"><summary className="text-[11px] text-slate-500 cursor-pointer">Version {rule.current_version} · history</summary><div className="mt-2 space-y-2">{[...(rule.chatthoughts_rule_versions ?? [])].sort((a,b) => b.version-a.version).map((version) => <div key={version.id} className="border-l-2 border-slate-200 pl-3 text-xs"><div className="text-slate-500">v{version.version} · {version.change_kind} · {new Date(version.created_at).toLocaleString()}</div><div className="text-slate-700 mt-0.5">{version.text}</div>{version.source_thought_id && <button onClick={() => openSourceThought(version.source_thought_id!)} className="block text-left text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline mt-0.5">Source thought: {version.source_thought_id}</button>}</div>)}</div></details></div></li>)}
+              {rules.map((rule, index) => <li key={rule.id} className="flex gap-3 rounded-xl border border-slate-200 p-4"><span className="shrink-0 w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 grid place-items-center text-xs font-semibold">{index + 1}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-800">{rule.text}</p><button onClick={() => deleteRule(rule)} disabled={deletingRuleId === rule.id} className="shrink-0 text-[11px] text-red-600 hover:text-red-800 hover:underline disabled:opacity-50">{deletingRuleId === rule.id ? "Deleting..." : "Delete"}</button></div><details className="mt-2"><summary className="text-[11px] text-slate-500 cursor-pointer">Version {rule.current_version} · history</summary><div className="mt-2 space-y-2">{[...(rule.chatthoughts_rule_versions ?? [])].sort((a,b) => b.version-a.version).map((version) => <div key={version.id} className="border-l-2 border-slate-200 pl-3 text-xs"><div className="text-slate-500">v{version.version} · {version.change_kind} · {new Date(version.created_at).toLocaleString()}</div><div className="text-slate-700 mt-0.5">{version.text}</div>{version.source_thought_id && <button onClick={() => openSourceThought(version.source_thought_id!)} className="block text-left text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline mt-0.5">Source thought: {version.source_thought_id}</button>}</div>)}</div></details></div></li>)}
             </ol>}
             <details className="mt-5 border-t border-slate-200 pt-4">
               <summary className="text-xs uppercase tracking-wider text-slate-600 cursor-pointer">Other Points ({otherPoints.length})</summary>
