@@ -88,6 +88,7 @@ create table if not exists chatthoughts_sacrifice_cards (
   parent_id uuid references chatthoughts_sacrifice_cards(id) on delete cascade,
   kind text not null check (kind in ('vardaan','sacrifice')),
   text text not null,
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint chatthoughts_sacrifice_cards_parent_check check (
@@ -95,6 +96,8 @@ create table if not exists chatthoughts_sacrifice_cards (
     or (kind = 'sacrifice' and parent_id is not null)
   )
 );
+alter table chatthoughts_rules add column if not exists is_active boolean not null default true;
+create index if not exists chatthoughts_rules_active_channel_idx on chatthoughts_rules (channel, created_at) where is_active;
 
 create index if not exists chatthoughts_sacrifice_cards_kind_updated_at_idx
   on chatthoughts_sacrifice_cards (kind, updated_at desc);
@@ -144,6 +147,7 @@ create table if not exists chatthoughts_observation_thoughts (
   id uuid primary key default uuid_generate_v4(),
   channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English','General')),
   raw text not null,
+  legacy_thought_id uuid,
   summary text,
   points jsonb not null default '[]'::jsonb,
   other_points jsonb not null default '[]'::jsonb,
@@ -155,6 +159,7 @@ create table if not exists chatthoughts_observation_thoughts (
 alter table chatthoughts_observation_thoughts add column if not exists added_point_indexes jsonb not null default '[]'::jsonb;
 alter table chatthoughts_observation_thoughts add column if not exists summary text;
 alter table chatthoughts_observation_thoughts add column if not exists other_points jsonb not null default '[]'::jsonb;
+alter table chatthoughts_observation_thoughts add column if not exists legacy_thought_id uuid;
 
 create table if not exists chatthoughts_rules (
   id uuid primary key default uuid_generate_v4(),

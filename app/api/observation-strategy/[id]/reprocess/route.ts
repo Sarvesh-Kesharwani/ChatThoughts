@@ -21,7 +21,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { data: rules, error: rulesError } = await supabase
     .from("chatthoughts_rules")
     .select("id,text")
-    .eq("channel", thought.channel);
+    .eq("channel", thought.channel)
+    .eq("is_active", true);
   if (rulesError) return NextResponse.json({ error: rulesError.message }, { status: 500 });
 
   let comparison;

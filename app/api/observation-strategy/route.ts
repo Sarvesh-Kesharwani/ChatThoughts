@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   if (!channel.success) return NextResponse.json({ error: "invalid channel" }, { status: 400 });
   const [thoughts, rules] = await Promise.all([
     supabase.from("chatthoughts_observation_thoughts").select("*").eq("channel", channel.data).order("created_at", { ascending: false }),
-    supabase.from("chatthoughts_rules").select("*, chatthoughts_rule_versions(*)").eq("channel", channel.data).order("created_at", { ascending: true }),
+    supabase.from("chatthoughts_rules").select("*, chatthoughts_rule_versions(*)").eq("channel", channel.data).eq("is_active", true).order("created_at", { ascending: true }),
   ]);
   if (thoughts.error || rules.error) return NextResponse.json({ error: thoughts.error?.message || rules.error?.message }, { status: 500 });
   return NextResponse.json({ thoughts: thoughts.data ?? [], rules: rules.data ?? [] });
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   catch (error) { console.error("observation extraction failed", error); return NextResponse.json({ error: "AI processing failed" }, { status: 502 }); }
   const points = extracted.main_points;
   const { data: currentRules, error: rulesError } = await supabase.from("chatthoughts_rules")
-    .select("id,text").eq("channel", parsed.data.channel);
+    .select("id,text").eq("channel", parsed.data.channel).eq("is_active", true);
   if (rulesError) return NextResponse.json({ error: rulesError.message }, { status: 500 });
   let comparison;
   try { comparison = await compareObservationsWithRulebook(points, currentRules ?? []); }

@@ -13,7 +13,7 @@ const decisionSchema = z.object({
 async function load(id: string) {
   const { data: thought, error } = await supabase.from("chatthoughts_observation_thoughts").select("*").eq("id", id).single();
   if (error || !thought) return { error: error?.message || "Thought not found" };
-  const { data: rules, error: rulesError } = await supabase.from("chatthoughts_rules").select("*").eq("channel", thought.channel).order("created_at");
+  const { data: rules, error: rulesError } = await supabase.from("chatthoughts_rules").select("*").eq("channel", thought.channel).eq("is_active", true).order("created_at");
   return rulesError ? { error: rulesError.message } : { thought, rules: rules ?? [] };
 }
 

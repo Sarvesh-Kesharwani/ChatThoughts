@@ -28,6 +28,8 @@ export default function ObservationStrategyUpdatesPage() {
   const [chat, setChat] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [highlightThoughtId, setHighlightThoughtId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [moveTargets, setMoveTargets] = useState<Record<string, Channel>>({});
   const thoughtRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const load = useCallback(async () => {
@@ -101,6 +103,18 @@ export default function ObservationStrategyUpdatesPage() {
     load();
   }
 
+  async function moveThought(thought: Thought) {
+    const target = moveTargets[thought.id] ?? CHANNELS.find((item) => item !== channel);
+    if (!target) return;
+    setMovingId(thought.id); setMessage("");
+    const res = await fetch(`/api/observation-strategy/${thought.id}/move`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ channel: target }) });
+    const json = await res.json().catch(() => ({}));
+    setMovingId(null);
+    if (!res.ok) { setMessage(json.error || "Could not move thought."); return; }
+    setMessage(`Thought moved to ${target}. ${json.archived_rules} old-channel rule${json.archived_rules === 1 ? "" : "s"} removed; ${json.added} target rule${json.added === 1 ? "" : "s"} added.${json.needs_review ? " Conflicts need review in target channel." : ""}`);
+    load();
+  }
+
   const pending = useMemo(() => thoughts.filter((thought) => thought.status !== "resolved"), [thoughts]);
   const otherPoints = useMemo(() => thoughts.flatMap((thought) => (thought.other_points ?? []).map((text) => ({ text, thoughtId: thought.id }))), [thoughts]);
 
@@ -145,7 +159,7 @@ export default function ObservationStrategyUpdatesPage() {
             </details>
             <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main — Study Strategy Related ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>
             {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other Points ({thought.other_points!.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-500">{thought.other_points!.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>}
-            <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><div className="flex items-center gap-3"><button onClick={() => reprocessThought(thought)} disabled={reprocessingId === thought.id} className="text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50">{reprocessingId === thought.id ? "Re-updating..." : "Re-update RuleBook"}</button><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div></div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><div className="flex flex-wrap items-center gap-2"><select value={moveTargets[thought.id] ?? CHANNELS.find((item) => item !== channel)} onChange={(event) => setMoveTargets((old) => ({ ...old, [thought.id]: event.target.value as Channel }))} className="rounded border border-slate-200 bg-white px-2 py-1">{CHANNELS.filter((item) => item !== channel).map((item) => <option key={item} value={item}>{item}</option>)}</select><button onClick={() => moveThought(thought)} disabled={movingId === thought.id} className="text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50">{movingId === thought.id ? "Moving..." : "Move"}</button><button onClick={() => reprocessThought(thought)} disabled={reprocessingId === thought.id} className="text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50">{reprocessingId === thought.id ? "Re-updating..." : "Re-update RuleBook"}</button><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div></div>
           </article>)}
         </div>
       </section>

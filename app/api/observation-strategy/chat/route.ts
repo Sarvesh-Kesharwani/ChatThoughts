@@ -14,7 +14,7 @@ const schema = z.object({
 export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid input" }, { status: 400 });
-  const { data, error } = await supabase.from("chatthoughts_rules").select("text").eq("channel", parsed.data.channel).order("created_at", { ascending: true });
+  const { data, error } = await supabase.from("chatthoughts_rules").select("text").eq("channel", parsed.data.channel).eq("is_active", true).order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   try {
     const answer = await chatWithRulebook(parsed.data.question, (data ?? []).map((rule, index) => ({ number: index + 1, text: rule.text })));

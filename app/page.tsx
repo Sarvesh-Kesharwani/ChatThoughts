@@ -19,6 +19,8 @@ type Field = { key: string; label: string; type: "string" | "array"; options?: s
 type OutputSchema = { fields: Field[] };
 
 const DRAFT_KEY = "chatthoughts:draft:raw";
+const OBSERVATION_CHANNELS = ["Study", "GameDev", "Relaxation/Sleep", "Gym", "English", "General"] as const;
+type ObservationChannel = (typeof OBSERVATION_CHANNELS)[number];
 
 function labelFor(schema: OutputSchema | null, key: string) {
   const f = schema?.fields.find((x) => x.key === key);
@@ -71,6 +73,8 @@ export default function ThoughtsPage() {
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [moveTargets, setMoveTargets] = useState<Record<string, ObservationChannel>>({});
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   // Load draft on mount.
   useEffect(() => {
@@ -148,6 +152,17 @@ export default function ThoughtsPage() {
     if (!confirm("Delete this thought?")) return;
     const res = await fetch(`/api/thoughts/${id}`, { method: "DELETE" });
     if (res.ok) load();
+  }
+
+  async function moveToObservation(thought: Thought) {
+    const channel = moveTargets[thought.id] ?? "Study";
+    setMovingId(thought.id); setAddMsg(null);
+    const res = await fetch(`/api/thoughts/${thought.id}/move-to-observation`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ channel }) });
+    const json = await res.json().catch(() => ({}));
+    setMovingId(null);
+    if (!res.ok) { setAddMsg(json.error || "Could not move thought."); return; }
+    setAddMsg(`Thought moved to Observation/Strategy Updates → ${channel}.${json.needs_review ? " Conflicts need review." : ""}`);
+    load();
   }
 
   async function search() {
@@ -322,7 +337,11 @@ export default function ThoughtsPage() {
                       <span>
                         Updated {new Date(t.updated_at).toLocaleDateString()}
                       </span>
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <select value={moveTargets[t.id] ?? "Study"} onChange={(event) => setMoveTargets((old) => ({ ...old, [t.id]: event.target.value as ObservationChannel }))} className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px]">
+                          {OBSERVATION_CHANNELS.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+                        </select>
+                        <button onClick={() => moveToObservation(t)} disabled={movingId === t.id} className="text-indigo-600 hover:text-indigo-800 disabled:opacity-50">{movingId === t.id ? "Moving..." : "Move to channel"}</button>
                         <button
                           onClick={() => {
                             setEditId(t.id);
