@@ -15,19 +15,29 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (thoughtError || !thought) return NextResponse.json({ error: thoughtError?.message || "Thought not found" }, { status: 404 });
 
   let extracted: Awaited<ReturnType<typeof extractAtomicObservations>>;
-  try { extracted = await extractAtomicObservations(thought.raw); }
+  try { extracted = await extractAtomicObservations(thought.raw, thought.channel); }
   catch (error) { console.error("thought reprocessing failed", error); return NextResponse.json({ error: "AI reprocessing failed" }, { status: 502 }); }
 
   const { data: rules, error: rulesError } = await supabase
     .from("chatthoughts_rules")
-    .select("id,text")
+    .select("id,text,chatthoughts_rule_versions(version,source_thought_id)")
     .eq("channel", thought.channel)
     .eq("is_active", true);
   if (rulesError) return NextResponse.json({ error: rulesError.message }, { status: 500 });
+  const ownRuleIds = new Set((rules ?? []).filter((rule) => {
+    const versions = Array.isArray(rule.chatthoughts_rule_versions) ? rule.chatthoughts_rule_versions : [];
+    return versions.some((version) => version.version === 1 && version.source_thought_id === id);
+  }).map((rule) => rule.id));
+  const comparisonRules = (rules ?? []).filter((rule) => !ownRuleIds.has(rule.id)).map((rule) => ({ id: rule.id, text: rule.text }));
 
   let comparison;
-  try { comparison = await compareObservationsWithRulebook(extracted.main_points, rules ?? []); }
+  try { comparison = await compareObservationsWithRulebook(extracted.main_points, comparisonRules); }
   catch (error) { console.error("reprocessed rule comparison failed", error); return NextResponse.json({ error: "AI comparison failed" }, { status: 502 }); }
+
+  if (ownRuleIds.size) {
+    const { error: archiveError } = await supabase.from("chatthoughts_rules").update({ is_active: false }).in("id", [...ownRuleIds]);
+    if (archiveError) return NextResponse.json({ error: archiveError.message }, { status: 500 });
+  }
 
   for (const index of comparison.non_conflicting_point_indexes) {
     const text = extracted.main_points[index];

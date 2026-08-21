@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!raw) return NextResponse.json({ error: "Thought has no movable text" }, { status: 400 });
 
   let extracted: Awaited<ReturnType<typeof extractAtomicObservations>>;
-  try { extracted = await extractAtomicObservations(raw); }
+  try { extracted = await extractAtomicObservations(raw, parsed.data.channel); }
   catch (error) { console.error("legacy thought extraction failed", error); return NextResponse.json({ error: "AI processing failed" }, { status: 502 }); }
   const { data: rules, error: rulesError } = await supabase.from("chatthoughts_rules").select("id,text").eq("channel", parsed.data.channel).eq("is_active", true);
   if (rulesError) return NextResponse.json({ error: rulesError.message }, { status: 500 });

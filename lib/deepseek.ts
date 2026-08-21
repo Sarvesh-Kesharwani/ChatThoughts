@@ -259,12 +259,12 @@ const observationSchema = z.object({
   other_points: z.array(z.string().min(1)).max(20),
 });
 
-export async function extractAtomicObservations(raw: string) {
+export async function extractAtomicObservations(raw: string, channel: string) {
   const compressed = await compressForModel(raw);
   const { object } = await generateObject({
     model,
     schema: observationSchema,
-    system: `Extract the user's thought into exactly two categories:
+    system: `Summarize and structure the user's raw thought for the ${channel} channel. Return exactly two categories:
 
 1. Main — Study Strategy Related
 2. Other Points
@@ -274,17 +274,21 @@ VOICE PRESERVATION — CRITICAL:
 - Do not heavily rephrase, polish, formalize, summarize away, or replace their words with cleaner AI-written language.
 - You may remove obvious repetition, filler, and transcript noise, but every result must still sound like the user speaking.
 
-DO NOT OVER-SPLIT:
-- Do not force the thought into small atomic points.
-- When sentences form one reasoning chain, keep them together as one complete point or paragraph.
+OUTPUT FORMAT — SMALL PARAGRAPHS, NEVER RAW COPY:
+- Do not return the original thought unchanged. Summarize it concisely and structurally.
+- Produce a few small, readable paragraphs—not atomic points, bullet fragments, headings, or one giant paragraph.
+- Each array item must be one complete small paragraph.
+- When sentences form one reasoning chain, keep them together in one paragraph.
 - Preserve chains such as problem → reasoning → implication → solution → next step.
 - Keep the why, cause/effect, dependencies, sequence, comparison, conclusion, and intended action together when splitting would lose them.
 - Prefer a wholesome complete reasoning paragraph over disconnected fragments. It must remain understandable months later without reopening the transcript.
 
 CLASSIFICATION:
-- main_points: how the user should learn, finish courses, make notes, revise, memorize, recall, prepare for interviews or teaching, create connection notes, backtrack after gaps, validate knowledge, or automate the study/revision pipeline.
+- main_points: concise structured paragraphs containing the central insights, reasoning, strategies, conclusions, or intended actions relevant to the ${channel} channel.
+- For Study, this includes how the user should learn, finish courses, make notes, revise, memorize, recall, prepare for interviews or teaching, create connection notes, backtrack after gaps, validate knowledge, or automate the study/revision pipeline.
+- For General, include every meaningful central insight/reasoning/strategy in main_points; do not mistakenly copy the full raw thought as one entry.
 - other_points: surrounding observations/context such as AI industry changes, tools/courses, course creators, game development, unrelated projects, or meta-comments about recording thoughts.
-- If context belongs to a larger chain whose main conclusion is a study strategy, keep the full chain together in main_points.
+- If context belongs to a larger chain whose main conclusion is relevant to ${channel}, keep the necessary context with that paragraph in main_points.
 
 SUMMARY:
 - summary must be one short line, using the user's own keywords and speaking style.
@@ -328,7 +332,7 @@ export async function compareObservationsWithRulebook(
     model,
     schema: ruleConflictSchema,
     system:
-      "Compare new complete study-strategy points with the latest RuleBook. Preserve the user's wording and reasoning chain when accepting a new point. A conflict means mutually incompatible guidance or conclusions. Return every conflicting pair. Put only genuinely novel, non-conflicting complete points in non_conflicting_point_indexes. Omit duplicates, paraphrases, and points already fully covered by a rule; do not call them conflicts. Complementary or materially more specific guidance may be novel. Use only supplied rule IDs and zero-based point indexes.",
+      "Compare new concise structured paragraphs with the latest RuleBook. Preserve the user's wording and reasoning chain. A conflict means mutually incompatible guidance or conclusions. Return every conflicting pair. Put only genuinely novel, non-conflicting complete paragraphs in non_conflicting_point_indexes. Omit duplicates, paraphrases, and paragraphs already fully covered by a rule; do not call them conflicts. Complementary or materially more specific reasoning may be novel. Use only supplied rule IDs and zero-based indexes.",
     prompt: `NEW OBSERVATIONS:\n${observations
       .map((text, index) => `${index}: ${text}`)
       .join("\n")}\n\nLATEST RULEBOOK:\n${rules

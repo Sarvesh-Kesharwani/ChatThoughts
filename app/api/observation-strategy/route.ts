@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid input" }, { status: 400 });
   let extracted: Awaited<ReturnType<typeof extractAtomicObservations>>;
-  try { extracted = await extractAtomicObservations(parsed.data.raw); }
+  try { extracted = await extractAtomicObservations(parsed.data.raw, parsed.data.channel); }
   catch (error) { console.error("observation extraction failed", error); return NextResponse.json({ error: "AI processing failed" }, { status: 502 }); }
   const points = extracted.main_points;
   const { data: currentRules, error: rulesError } = await supabase.from("chatthoughts_rules")

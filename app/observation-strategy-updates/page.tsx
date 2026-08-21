@@ -63,7 +63,7 @@ export default function ObservationStrategyUpdatesPage() {
     setAdding(false);
     if (!res.ok) { setMessage(json.error || "Failed to add thought."); return; }
     setRaw("");
-    setMessage(`${json.added} new rule-point${json.added === 1 ? "" : "s"} added.${json.needs_review ? " Conflicting point needs review." : ""}`);
+    setMessage(`${json.added} new RuleBook paragraph${json.added === 1 ? "" : "s"} added.${json.needs_review ? " Conflicting paragraph needs review." : ""}`);
     if (json.needs_review) setRightTab("conflicts");
     load();
   }
@@ -74,7 +74,7 @@ export default function ObservationStrategyUpdatesPage() {
     const json = await res.json();
     setReviewing(null);
     if (!res.ok) { setMessage(json.error || "Conflict check failed."); return; }
-    if (json.resolved) { setMessage("No current conflict. New rule-points added."); load(); return; }
+    if (json.resolved) { setMessage("No current conflict. New RuleBook paragraphs added."); load(); return; }
     setReviews((old) => ({ ...old, [thought.id]: { ...json.comparison, rules: json.rules } }));
   }
 
@@ -99,7 +99,7 @@ export default function ObservationStrategyUpdatesPage() {
     const json = await res.json().catch(() => ({}));
     setReprocessingId(null);
     if (!res.ok) { setMessage(json.error || "Could not re-update RuleBook."); return; }
-    setMessage(`Thought reprocessed. ${json.added} new RuleBook point${json.added === 1 ? "" : "s"} added.${json.needs_review ? " Conflicting point needs review." : ""}`);
+    setMessage(`Thought reprocessed. ${json.added} new RuleBook paragraph${json.added === 1 ? "" : "s"} added.${json.needs_review ? " Conflicting paragraph needs review." : ""}`);
     if (json.needs_review) setRightTab("conflicts");
     load();
   }
@@ -153,7 +153,7 @@ export default function ObservationStrategyUpdatesPage() {
       <section className="border-r border-slate-200 flex flex-col min-h-0">
         <div className="p-4 border-b border-slate-200 bg-white">
           <h1 className="font-semibold text-slate-900">New thought</h1>
-          <p className="text-xs text-slate-500 mt-1">Add raw thought. AI extracts atomic observations for {channel}.</p>
+          <p className="text-xs text-slate-500 mt-1">Add raw thought. AI summarizes it into concise, structured paragraphs for {channel}.</p>
           <textarea value={raw} onChange={(event) => setRaw(event.target.value)} rows={5} placeholder="Type what's on your mind..." className="mt-3 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 resize-none" />
           <div className="mt-3 flex items-center gap-3">
             <button onClick={addThought} disabled={adding || !raw.trim()} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-5 py-2 text-sm font-medium text-white">{adding ? "Processing..." : "Add"}</button>
@@ -169,8 +169,8 @@ export default function ObservationStrategyUpdatesPage() {
               <summary className="cursor-pointer list-none flex items-center gap-2"><span className="text-sm text-slate-800 truncate flex-1">{thoughtSummary(thought)}</span><span className="text-[11px] text-indigo-600 shrink-0">Open</span></summary>
               <div className="mt-3 border-t border-slate-100 pt-3"><div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Original thought</div><p className="text-sm text-slate-700 whitespace-pre-wrap">{thought.raw}</p></div>
             </details>
-            <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main — Study Strategy Related ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>
-            {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other Points ({thought.other_points!.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-500">{thought.other_points!.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>}
+            <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main — Structured paragraphs ({thought.points.length})</summary><div className="mt-2 space-y-3 text-xs text-slate-600">{thought.points.map((paragraph, index) => <p key={index} className="whitespace-pre-wrap">{paragraph}</p>)}</div></details>
+            {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other paragraphs ({thought.other_points!.length})</summary><div className="mt-2 space-y-3 text-xs text-slate-500">{thought.other_points!.map((paragraph, index) => <p key={index} className="whitespace-pre-wrap">{paragraph}</p>)}</div></details>}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><div className="flex flex-wrap items-center gap-2"><select value={moveTargets[thought.id] ?? CHANNELS.find((item) => item !== channel)} onChange={(event) => setMoveTargets((old) => ({ ...old, [thought.id]: event.target.value as Channel }))} className="rounded border border-slate-200 bg-white px-2 py-1">{CHANNELS.filter((item) => item !== channel).map((item) => <option key={item} value={item}>{item}</option>)}</select><button onClick={() => moveThought(thought)} disabled={movingId === thought.id} className="text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50">{movingId === thought.id ? "Moving..." : "Move"}</button><button onClick={() => reprocessThought(thought)} disabled={reprocessingId === thought.id} className="text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50">{reprocessingId === thought.id ? "Re-updating..." : "Re-update RuleBook"}</button><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div></div>
           </article>)}
         </div>
@@ -185,8 +185,8 @@ export default function ObservationStrategyUpdatesPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {rightTab === "rules" ? <div>
-            <h3 className="text-xs uppercase tracking-wider text-indigo-700 mb-3">Main — Study Strategy Related ({rules.length})</h3>
-            {rules.length === 0 ? <div className="h-32 grid place-items-center text-center"><div><p className="text-sm text-slate-500">No study-strategy points yet.</p><p className="text-xs text-slate-400 mt-1">New unique strategy reasoning will appear here.</p></div></div> : <ol className="space-y-3">
+            <h3 className="text-xs uppercase tracking-wider text-indigo-700 mb-3">Main — Structured paragraphs ({rules.length})</h3>
+            {rules.length === 0 ? <div className="h-32 grid place-items-center text-center"><div><p className="text-sm text-slate-500">No RuleBook paragraphs yet.</p><p className="text-xs text-slate-400 mt-1">New concise structured reasoning will appear here.</p></div></div> : <ol className="space-y-3">
               {rules.map((rule, index) => <li key={rule.id} className="flex gap-3 rounded-xl border border-slate-200 p-4"><span className="shrink-0 w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 grid place-items-center text-xs font-semibold">{index + 1}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-800">{rule.text}</p><button onClick={() => deleteRule(rule)} disabled={deletingRuleId === rule.id} className="shrink-0 text-[11px] text-red-600 hover:text-red-800 hover:underline disabled:opacity-50">{deletingRuleId === rule.id ? "Deleting..." : "Delete"}</button></div><details className="mt-2"><summary className="text-[11px] text-slate-500 cursor-pointer">Version {rule.current_version} · history</summary><div className="mt-2 space-y-2">{[...(rule.chatthoughts_rule_versions ?? [])].sort((a,b) => b.version-a.version).map((version) => <div key={version.id} className="border-l-2 border-slate-200 pl-3 text-xs"><div className="text-slate-500">v{version.version} · {version.change_kind} · {new Date(version.created_at).toLocaleString()}</div><div className="text-slate-700 mt-0.5">{version.text}</div>{version.source_thought_id && <button onClick={() => openSourceThought(version.source_thought_id!)} className="block text-left text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline mt-0.5">Source thought: {version.source_thought_id}</button>}</div>)}</div></details></div></li>)}
             </ol>}
             <details className="mt-5 border-t border-slate-200 pt-4">
@@ -199,7 +199,7 @@ export default function ObservationStrategyUpdatesPage() {
               <div className="text-[11px] uppercase tracking-wider text-amber-600">Pending review</div><p className="mt-2 text-sm text-slate-800">{thought.raw}</p>
               {!review ? <button onClick={() => inspect(thought)} disabled={reviewing === thought.id} className="mt-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 text-sm">{reviewing === thought.id ? "Comparing with latest RuleBook..." : "Resolve Conflict"}</button> : <div className="mt-4 space-y-4">
                 {review.conflicts.map((conflict, index) => { const rule = review.rules.find((item) => item.id === conflict.rule_id); const key = `${thought.id}:${conflict.rule_id}:${conflict.thought_point_index}`; return <div key={key} className="rounded-lg border border-red-200 bg-red-50/50 p-3"><p className="text-xs text-red-700 mb-3">Conflict {index + 1}: {conflict.reason}</p><div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                  <button onClick={() => setDecisions((old) => ({ ...old, [key]: "thought" }))} className={`text-left rounded-lg border p-3 text-sm ${decisions[key] === "thought" ? "border-indigo-600 bg-indigo-50" : "border-red-200 bg-white"}`}><span className="block text-[10px] uppercase text-red-600 mb-1">New thought point</span>{thought.points[conflict.thought_point_index]}</button>
+                  <button onClick={() => setDecisions((old) => ({ ...old, [key]: "thought" }))} className={`text-left rounded-lg border p-3 text-sm ${decisions[key] === "thought" ? "border-indigo-600 bg-indigo-50" : "border-red-200 bg-white"}`}><span className="block text-[10px] uppercase text-red-600 mb-1">New thought paragraph</span>{thought.points[conflict.thought_point_index]}</button>
                   <button onClick={() => setDecisions((old) => ({ ...old, [key]: "rule" }))} className={`text-left rounded-lg border p-3 text-sm ${decisions[key] === "rule" ? "border-indigo-600 bg-indigo-50" : "border-red-200 bg-white"}`}><span className="block text-[10px] uppercase text-red-600 mb-1">Current rule</span>{rule?.text}</button>
                 </div></div>})}
                 <button onClick={() => applyDecisions(thought)} disabled={reviewing === thought.id} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 text-sm">Save decisions</button>
