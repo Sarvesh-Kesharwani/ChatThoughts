@@ -90,6 +90,7 @@ export default function ObservationStrategyUpdatesPage() {
   }
 
   const pending = useMemo(() => thoughts.filter((thought) => thought.status !== "resolved"), [thoughts]);
+  const otherPoints = useMemo(() => thoughts.flatMap((thought) => (thought.other_points ?? []).map((text) => ({ text, thoughtId: thought.id }))), [thoughts]);
 
   function openSourceThought(id: string) {
     const element = thoughtRefs.current[id];
@@ -130,8 +131,8 @@ export default function ObservationStrategyUpdatesPage() {
               <summary className="cursor-pointer list-none flex items-center gap-2"><span className="text-sm text-slate-800 truncate flex-1">{thoughtSummary(thought)}</span><span className="text-[11px] text-indigo-600 shrink-0">Open</span></summary>
               <div className="mt-3 border-t border-slate-100 pt-3"><div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Original thought</div><p className="text-sm text-slate-700 whitespace-pre-wrap">{thought.raw}</p></div>
             </details>
-            <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main strategy points ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-1 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index}>{point}</li>)}</ol></details>
-            {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other points ({thought.other_points!.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-1 text-xs text-slate-500">{thought.other_points!.map((point, index) => <li key={index}>{point}</li>)}</ol></details>}
+            <details className="mt-3"><summary className="text-xs text-indigo-600 cursor-pointer">Main — Study Strategy Related ({thought.points.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-600">{thought.points.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>
+            {(thought.other_points?.length ?? 0) > 0 && <details className="mt-2"><summary className="text-xs text-slate-500 cursor-pointer">Other Points ({thought.other_points!.length})</summary><ol className="mt-2 pl-5 list-decimal space-y-2 text-xs text-slate-500">{thought.other_points!.map((point, index) => <li key={index} className="whitespace-pre-wrap">{point}</li>)}</ol></details>}
             <div className="mt-3 flex justify-between text-[11px] text-slate-500"><span>{new Date(thought.created_at).toLocaleString()}</span><span className={thought.status === "resolved" ? "text-emerald-600" : "text-amber-600"}>{thought.status === "resolved" ? "RuleBook updated" : "Needs review"}</span></div>
           </article>)}
         </div>
@@ -146,9 +147,14 @@ export default function ObservationStrategyUpdatesPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {rightTab === "rules" ? <div>
-            {rules.length === 0 ? <div className="h-48 grid place-items-center text-center"><div><p className="text-sm text-slate-500">RuleBook is empty.</p><p className="text-xs text-slate-400 mt-1">New unique observations will appear here.</p></div></div> : <ol className="space-y-3">
+            <h3 className="text-xs uppercase tracking-wider text-indigo-700 mb-3">Main — Study Strategy Related ({rules.length})</h3>
+            {rules.length === 0 ? <div className="h-32 grid place-items-center text-center"><div><p className="text-sm text-slate-500">No study-strategy points yet.</p><p className="text-xs text-slate-400 mt-1">New unique strategy reasoning will appear here.</p></div></div> : <ol className="space-y-3">
               {rules.map((rule, index) => <li key={rule.id} className="flex gap-3 rounded-xl border border-slate-200 p-4"><span className="shrink-0 w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 grid place-items-center text-xs font-semibold">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-sm text-slate-800">{rule.text}</p><details className="mt-2"><summary className="text-[11px] text-slate-500 cursor-pointer">Version {rule.current_version} · history</summary><div className="mt-2 space-y-2">{[...(rule.chatthoughts_rule_versions ?? [])].sort((a,b) => b.version-a.version).map((version) => <div key={version.id} className="border-l-2 border-slate-200 pl-3 text-xs"><div className="text-slate-500">v{version.version} · {version.change_kind} · {new Date(version.created_at).toLocaleString()}</div><div className="text-slate-700 mt-0.5">{version.text}</div>{version.source_thought_id && <button onClick={() => openSourceThought(version.source_thought_id!)} className="block text-left text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline mt-0.5">Source thought: {version.source_thought_id}</button>}</div>)}</div></details></div></li>)}
             </ol>}
+            <details className="mt-5 border-t border-slate-200 pt-4">
+              <summary className="text-xs uppercase tracking-wider text-slate-600 cursor-pointer">Other Points ({otherPoints.length})</summary>
+              {otherPoints.length === 0 ? <p className="mt-3 text-sm text-slate-500">No other points yet.</p> : <ol className="mt-3 space-y-2 pl-5 list-decimal">{otherPoints.map((point, index) => <li key={`${point.thoughtId}:${index}`} className="text-sm text-slate-600 whitespace-pre-wrap"><span>{point.text}</span><button onClick={() => openSourceThought(point.thoughtId)} className="block text-[10px] text-indigo-600 hover:underline mt-1">Open source thought</button></li>)}</ol>}
+            </details>
           </div> : rightTab === "conflicts" ? <div className="space-y-4">
             {pending.length === 0 && <div className="h-48 grid place-items-center text-sm text-slate-500">No unresolved conflicts.</div>}
             {pending.map((thought) => { const review = reviews[thought.id]; return <article key={thought.id} className="rounded-xl border border-slate-200 p-4">

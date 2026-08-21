@@ -264,8 +264,36 @@ export async function extractAtomicObservations(raw: string) {
   const { object } = await generateObject({
     model,
     schema: observationSchema,
-    system:
-      "Analyze a user's raw thought about one life channel. Return: (1) a short single-line summary, (2) main_points containing only reusable personal patterns, strategies, decision rules, mental models, or lessons about how the user should act, learn, practice, revise, remember, connect ideas, or improve, and (3) other_points containing context, news, examples, people/course comparisons, one-off facts, events, plans, or observations that are not reusable personal strategy. Preserve useful non-target content in other_points. Each point must be small, standalone, atomic, and faithful. Do not invent advice. A sentence such as 'others are adding AI courses faster' belongs in other_points; a sentence such as 'decide how much revision is needed and practice expanding a small idea through connections' belongs in main_points.",
+    system: `Extract the user's thought into exactly two categories:
+
+1. Main — Study Strategy Related
+2. Other Points
+
+VOICE PRESERVATION — CRITICAL:
+- Preserve the user's original speaking style, wording, keywords, sentence flow, and vocabulary as much as possible. Their keywords are memory triggers.
+- Do not heavily rephrase, polish, formalize, summarize away, or replace their words with cleaner AI-written language.
+- You may remove obvious repetition, filler, and transcript noise, but every result must still sound like the user speaking.
+
+DO NOT OVER-SPLIT:
+- Do not force the thought into small atomic points.
+- When sentences form one reasoning chain, keep them together as one complete point or paragraph.
+- Preserve chains such as problem → reasoning → implication → solution → next step.
+- Keep the why, cause/effect, dependencies, sequence, comparison, conclusion, and intended action together when splitting would lose them.
+- Prefer a wholesome complete reasoning paragraph over disconnected fragments. It must remain understandable months later without reopening the transcript.
+
+CLASSIFICATION:
+- main_points: how the user should learn, finish courses, make notes, revise, memorize, recall, prepare for interviews or teaching, create connection notes, backtrack after gaps, validate knowledge, or automate the study/revision pipeline.
+- other_points: surrounding observations/context such as AI industry changes, tools/courses, course creators, game development, unrelated projects, or meta-comments about recording thoughts.
+- If context belongs to a larger chain whose main conclusion is a study strategy, keep the full chain together in main_points.
+
+SUMMARY:
+- summary must be one short line, using the user's own keywords and speaking style.
+
+FINAL CHECK FOR EVERY OUTPUT:
+- Did you preserve the user's own words and speaking style?
+- Is enough surrounding reasoning retained for the thought to be complete?
+- Can it later be compared with a future thought to identify conflicts or changes in thinking?
+If not, merge back necessary surrounding sentences instead of shortening or rephrasing. Do not invent advice.`,
     prompt: `RAW THOUGHT:\n${compressed}`,
   });
   return {
@@ -300,7 +328,7 @@ export async function compareObservationsWithRulebook(
     model,
     schema: ruleConflictSchema,
     system:
-      "Compare new atomic observations with the latest RuleBook. A conflict means mutually incompatible guidance or factual claims. Return every conflicting pair. Put only genuinely novel, non-conflicting points in non_conflicting_point_indexes. Omit duplicates, paraphrases, and points already fully covered by a rule; do not call them conflicts. Complementary or materially more specific guidance may be novel. Use only supplied rule IDs and zero-based point indexes.",
+      "Compare new complete study-strategy points with the latest RuleBook. Preserve the user's wording and reasoning chain when accepting a new point. A conflict means mutually incompatible guidance or conclusions. Return every conflicting pair. Put only genuinely novel, non-conflicting complete points in non_conflicting_point_indexes. Omit duplicates, paraphrases, and points already fully covered by a rule; do not call them conflicts. Complementary or materially more specific guidance may be novel. Use only supplied rule IDs and zero-based point indexes.",
     prompt: `NEW OBSERVATIONS:\n${observations
       .map((text, index) => `${index}: ${text}`)
       .join("\n")}\n\nLATEST RULEBOOK:\n${rules
