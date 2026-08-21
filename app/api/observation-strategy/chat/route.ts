@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const schema = z.object({
-  channel: z.enum(["Study", "GameDev", "Relaxation/Sleep", "Gym", "English"]),
+  channel: z.enum(["Study", "GameDev", "Relaxation/Sleep", "Gym", "English", "General"]),
   question: z.string().trim().min(1),
 });
 

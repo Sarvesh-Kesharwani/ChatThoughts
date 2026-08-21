@@ -142,7 +142,7 @@ grant all on table chatthoughts_sacrifice_cards to anon, authenticated, service_
 -- persisted: pending reviews are compared with the latest rules on demand.
 create table if not exists chatthoughts_observation_thoughts (
   id uuid primary key default uuid_generate_v4(),
-  channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English')),
+  channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English','General')),
   raw text not null,
   summary text,
   points jsonb not null default '[]'::jsonb,
@@ -158,7 +158,7 @@ alter table chatthoughts_observation_thoughts add column if not exists other_poi
 
 create table if not exists chatthoughts_rules (
   id uuid primary key default uuid_generate_v4(),
-  channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English')),
+  channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English','General')),
   text text not null,
   current_version integer not null default 1,
   source_thought_id uuid references chatthoughts_observation_thoughts(id) on delete set null,
@@ -180,6 +180,14 @@ create table if not exists chatthoughts_rule_versions (
 create index if not exists chatthoughts_observation_thoughts_channel_idx on chatthoughts_observation_thoughts (channel, created_at desc);
 create index if not exists chatthoughts_rules_channel_idx on chatthoughts_rules (channel, created_at);
 create index if not exists chatthoughts_rule_versions_rule_idx on chatthoughts_rule_versions (rule_id, version desc);
+
+-- Expand existing installations to accept General.
+alter table chatthoughts_observation_thoughts drop constraint if exists chatthoughts_observation_thoughts_channel_check;
+alter table chatthoughts_observation_thoughts add constraint chatthoughts_observation_thoughts_channel_check
+  check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English','General'));
+alter table chatthoughts_rules drop constraint if exists chatthoughts_rules_channel_check;
+alter table chatthoughts_rules add constraint chatthoughts_rules_channel_check
+  check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English','General'));
 
 drop trigger if exists chatthoughts_observation_thoughts_updated_at on chatthoughts_observation_thoughts;
 create trigger chatthoughts_observation_thoughts_updated_at before update on chatthoughts_observation_thoughts

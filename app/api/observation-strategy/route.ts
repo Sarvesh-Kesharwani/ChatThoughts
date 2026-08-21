@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const CHANNELS = ["Study", "GameDev", "Relaxation/Sleep", "Gym", "English"] as const;
+const CHANNELS = ["Study", "GameDev", "Relaxation/Sleep", "Gym", "English", "General"] as const;
 const channelSchema = z.enum(CHANNELS);
 
 export async function GET(req: Request) {

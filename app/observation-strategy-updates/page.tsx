@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Nav from "@/components/Nav";
 
-const CHANNELS = ["Study", "GameDev", "Relaxation/Sleep", "Gym", "English"] as const;
+const CHANNELS = ["Study", "GameDev", "Relaxation/Sleep", "Gym", "English", "General"] as const;
 type Channel = (typeof CHANNELS)[number];
 type Thought = { id: string; raw: string; summary: string | null; points: string[]; other_points: string[] | null; added_point_indexes: number[]; status: "pending" | "awaiting_decision" | "resolved"; created_at: string };
 type Version = { id: string; version: number; text: string; change_kind: string; source_thought_id: string | null; created_at: string };
