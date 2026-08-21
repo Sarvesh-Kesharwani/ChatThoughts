@@ -252,3 +252,77 @@ export async function categorizeThoughts(
   });
   return object;
 }
+
+const observationSchema = z.object({
+  observations: z.array(z.string().min(1)).max(20),
+});
+
+export async function extractAtomicObservations(raw: string): Promise<string[]> {
+  const compressed = await compressForModel(raw);
+  const { object } = await generateObject({
+    model,
+    schema: observationSchema,
+    system:
+      "Convert the user's raw thought into small, standalone, atomic observations or strategies. Preserve meaning. One claim per point. Do not invent advice, merge unrelated claims, or add commentary.",
+    prompt: `RAW THOUGHT:\n${compressed}`,
+  });
+  return object.observations.map((x) => x.trim()).filter(Boolean);
+}
+
+const ruleConflictSchema = z.object({
+  conflicts: z.array(
+    z.object({
+      thought_point_index: z.number().int().nonnegative(),
+      rule_id: z.string(),
+      reason: z.string(),
+    })
+  ),
+  non_conflicting_point_indexes: z.array(z.number().int().nonnegative()),
+});
+
+export async function compareObservationsWithRulebook(
+  observations: string[],
+  rules: { id: string; text: string }[]
+) {
+  if (rules.length === 0) {
+    return {
+      conflicts: [],
+      non_conflicting_point_indexes: observations.map((_, index) => index),
+    };
+  }
+  const { object } = await generateObject({
+    model,
+    schema: ruleConflictSchema,
+    system:
+      "Compare new atomic observations with the latest RuleBook. A conflict means mutually incompatible guidance or factual claims. Return every conflicting pair. Put only genuinely novel, non-conflicting points in non_conflicting_point_indexes. Omit duplicates, paraphrases, and points already fully covered by a rule; do not call them conflicts. Complementary or materially more specific guidance may be novel. Use only supplied rule IDs and zero-based point indexes.",
+    prompt: `NEW OBSERVATIONS:\n${observations
+      .map((text, index) => `${index}: ${text}`)
+      .join("\n")}\n\nLATEST RULEBOOK:\n${rules
+      .map((rule) => `${rule.id}: ${rule.text}`)
+      .join("\n")}`,
+  });
+  const validIndexes = new Set(observations.map((_, index) => index));
+  const validRuleIds = new Set(rules.map((rule) => rule.id));
+  return {
+    conflicts: object.conflicts.filter(
+      (item) => validIndexes.has(item.thought_point_index) && validRuleIds.has(item.rule_id)
+    ),
+    non_conflicting_point_indexes: [...new Set(object.non_conflicting_point_indexes)].filter(
+      (index) => validIndexes.has(index)
+    ),
+  };
+}
+
+export async function chatWithRulebook(
+  question: string,
+  rules: { number: number; text: string }[]
+) {
+  if (rules.length === 0) return "RuleBook is empty, so I cannot answer from it yet.";
+  const { text } = await generateText({
+    model,
+    system:
+      "Answer the user's doubt using only the supplied latest RuleBook. Be clear and practical. Cite supporting rules inline as [Rule N]. Never invent a rule. If the RuleBook does not contain enough guidance, say exactly what is missing and suggest recording a thought about it.",
+    prompt: `QUESTION:\n${question}\n\nRULEBOOK:\n${rules.map((rule) => `Rule ${rule.number}: ${rule.text}`).join("\n")}`,
+  });
+  return text.trim();
+}

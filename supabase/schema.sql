@@ -137,3 +137,54 @@ alter table chatthoughts_thought_categories disable row level security;
 alter table chatthoughts_sacrifice_cards disable row level security;
 
 grant all on table chatthoughts_sacrifice_cards to anon, authenticated, service_role;
+
+-- Observation / Strategy Updates. Conflict analysis is intentionally not
+-- persisted: pending reviews are compared with the latest rules on demand.
+create table if not exists chatthoughts_observation_thoughts (
+  id uuid primary key default uuid_generate_v4(),
+  channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English')),
+  raw text not null,
+  points jsonb not null default '[]'::jsonb,
+  added_point_indexes jsonb not null default '[]'::jsonb,
+  status text not null default 'pending' check (status in ('pending','awaiting_decision','resolved')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table chatthoughts_observation_thoughts add column if not exists added_point_indexes jsonb not null default '[]'::jsonb;
+
+create table if not exists chatthoughts_rules (
+  id uuid primary key default uuid_generate_v4(),
+  channel text not null check (channel in ('Study','GameDev','Relaxation/Sleep','Gym','English')),
+  text text not null,
+  current_version integer not null default 1,
+  source_thought_id uuid references chatthoughts_observation_thoughts(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists chatthoughts_rule_versions (
+  id uuid primary key default uuid_generate_v4(),
+  rule_id uuid not null references chatthoughts_rules(id) on delete cascade,
+  version integer not null,
+  text text not null,
+  source_thought_id uuid references chatthoughts_observation_thoughts(id) on delete set null,
+  change_kind text not null check (change_kind in ('created','replaced','kept')),
+  created_at timestamptz not null default now(),
+  unique (rule_id, version)
+);
+
+create index if not exists chatthoughts_observation_thoughts_channel_idx on chatthoughts_observation_thoughts (channel, created_at desc);
+create index if not exists chatthoughts_rules_channel_idx on chatthoughts_rules (channel, created_at);
+create index if not exists chatthoughts_rule_versions_rule_idx on chatthoughts_rule_versions (rule_id, version desc);
+
+drop trigger if exists chatthoughts_observation_thoughts_updated_at on chatthoughts_observation_thoughts;
+create trigger chatthoughts_observation_thoughts_updated_at before update on chatthoughts_observation_thoughts
+  for each row execute function chatthoughts_set_updated_at();
+drop trigger if exists chatthoughts_rules_updated_at on chatthoughts_rules;
+create trigger chatthoughts_rules_updated_at before update on chatthoughts_rules
+  for each row execute function chatthoughts_set_updated_at();
+
+alter table chatthoughts_observation_thoughts disable row level security;
+alter table chatthoughts_rules disable row level security;
+alter table chatthoughts_rule_versions disable row level security;
+grant all on table chatthoughts_observation_thoughts, chatthoughts_rules, chatthoughts_rule_versions to anon, authenticated, service_role;

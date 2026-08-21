@@ -37,6 +37,7 @@ export default function Nav() {
         {tab("/categories", "Categories")}
         {tab("/abilities", "Abilities")}
         {tab("/sacrifice", "Sacrifice")}
+        {tab("/observation-strategy-updates", "Observation/Strategy Updates")}
         {tab("/settings", "Settings")}
       </div>
       <button
