@@ -11,3 +11,5 @@ next-env.d.ts
 .vercel
 .flowlens.config.json
 .lh/
+
+.env*.local

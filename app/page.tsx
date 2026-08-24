@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import Nav from "@/components/Nav";
 
 type Thought = {
@@ -73,6 +74,7 @@ export default function ThoughtsPage() {
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [moveTargets, setMoveTargets] = useState<Record<string, ObservationChannel>>({});
   const [movingId, setMovingId] = useState<string | null>(null);
 
@@ -230,10 +232,10 @@ export default function ThoughtsPage() {
   return (
     <div className="flex flex-col h-screen">
       <Nav />
-      <div className="grid grid-cols-1 md:grid-cols-2 flex-1 overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-2 flex-1 overflow-hidden bg-slate-50">
         {/* LEFT */}
-        <section className="border-r border-slate-200 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-slate-200 space-y-2 bg-white">
+        <section className="contents">
+          <div className="p-6 border-r border-slate-200 space-y-2 bg-white overflow-y-auto">
             <h2 className="font-semibold text-slate-900">New thought</h2>
             <p className="text-xs text-slate-500">
               Just dump it raw. AI will structure it on save. Draft autosaves.
@@ -261,10 +263,18 @@ export default function ThoughtsPage() {
               )}
             </div>
           </div>
-          <div className="overflow-y-auto p-4 space-y-3">
-            <h3 className="text-xs uppercase tracking-wider text-slate-500">
-              All thoughts ({sorted.length})
-            </h3>
+          <div className="overflow-y-auto p-4 space-y-3 bg-slate-50">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs uppercase tracking-wider text-slate-500">
+                All thoughts ({sorted.length})
+              </h3>
+              <Link
+                href="/thoughts"
+                className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+              >
+                View all
+              </Link>
+            </div>
             {loading && <p className="text-sm text-slate-500">Loading...</p>}
             {!loading && sorted.length === 0 && (
               <p className="text-sm text-slate-500">No thoughts yet.</p>
@@ -366,13 +376,24 @@ export default function ThoughtsPage() {
           </div>
         </section>
 
-        {/* RIGHT */}
-        <section className="flex flex-col overflow-hidden bg-white">
-          <div className="p-4 border-b border-slate-200">
-            <h2 className="font-semibold text-slate-900">Find a mantra</h2>
+        {/* FLOATING CHAT */}
+        {chatOpen && (
+        <section className="fixed bottom-20 right-4 z-50 flex h-[min(620px,calc(100vh-7rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="flex items-start justify-between border-b border-slate-200 p-4">
+            <div>
+              <h2 className="font-semibold text-slate-900">Find a mantra</h2>
             <p className="text-xs text-slate-500">
               Describe your situation. Get top-3 relevant thoughts.
             </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setChatOpen(false)}
+              aria-label="Close chat"
+              className="ml-3 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            >
+              ×
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {chat.length === 0 && (
@@ -462,6 +483,17 @@ export default function ThoughtsPage() {
             </button>
           </form>
         </section>
+        )}
+        <button
+          type="button"
+          onClick={() => setChatOpen((open) => !open)}
+          aria-label={chatOpen ? "Close mantra chat" : "Open mantra chat"}
+          aria-expanded={chatOpen}
+          className="fixed bottom-4 right-4 z-50 flex h-14 items-center gap-2 rounded-full bg-indigo-600 px-5 text-sm font-medium text-white shadow-lg transition hover:bg-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+        >
+          <span aria-hidden="true" className="text-xl">💬</span>
+          {chatOpen ? "Close" : "Find a mantra"}
+        </button>
       </div>
     </div>
   );
